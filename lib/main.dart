@@ -411,7 +411,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
                     const SizedBox(height: 20),
                     Text('$restTimeLeft초', style: const TextStyle(fontSize: 80, fontWeight: FontWeight.bold, color: Colors.white)),
                     const SizedBox(height: 20),
-                    const Text('근육이 성장하고 있어요 💪', style: TextStyle(fontSize: 20, color: Colors.white70)),
+                    const Text('근육이 성장하고 있어요! 💪', style: TextStyle(fontSize: 20, color: Colors.white70)),
                   ],
                 ),
               ),
