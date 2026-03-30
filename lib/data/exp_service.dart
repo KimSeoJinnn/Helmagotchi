@@ -6,14 +6,20 @@ class ExpService {
   static const int pushupExp = 12;
   static const int situpExp = 8;
 
-  void addExpByWorkout(UserModel user, WorkoutType type) {
+  UserModel addExpByWorkout(UserModel user, WorkoutType type) {
     int gainedExp = _calculateExp(type);
     user.currentExp += gainedExp;
 
-    while (user.currentExp >= _requiredExpForNextLevel(user.level)) {
-      user.currentExp -= _requiredExpForNextLevel(user.level);
+    int requiredExp = _requiredExpForNextLevel(user.level);
+
+    while (user.currentExp >= requiredExp) {
+      user.currentExp -= requiredExp;
       user.level++;
+      print("레벨업! 현재 레벨: ${user.level}");
+      requiredExp = _requiredExpForNextLevel(user.level);
     }
+
+    return user;
   }
 
   int _calculateExp(WorkoutType type) {
