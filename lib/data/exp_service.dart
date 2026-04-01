@@ -2,12 +2,12 @@ import 'models/user_model.dart';
 import '../core/workout_data.dart';
 
 class ExpService {
-  static const int squatExp = 10;
-  static const int pushupExp = 12;
-  static const int situpExp = 8;
+  static const int squatExp = 2;
+  static const int pushupExp = 3;
+  static const int situpExp = 2;
 
-  UserModel addExpByWorkout(UserModel user, WorkoutType type) {
-    int gainedExp = _calculateExp(type);
+  UserModel addExpByWorkout(UserModel user, WorkoutType type, int count) {
+    int gainedExp = _calculateExp(type, count);
     user.currentExp += gainedExp;
 
     int requiredExp = _requiredExpForNextLevel(user.level);
@@ -22,14 +22,14 @@ class ExpService {
     return user;
   }
 
-  int _calculateExp(WorkoutType type) {
+  int _calculateExp(WorkoutType type, int count) {
     switch (type) {
       case WorkoutType.squat:
-        return squatExp;
+        return squatExp * count;
       case WorkoutType.pushup:
-        return pushupExp;
+        return pushupExp * count;
       case WorkoutType.situp:
-        return situpExp;
+        return situpExp * count;
     }
   }
 
