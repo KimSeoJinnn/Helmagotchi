@@ -2,11 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'dart:async';
 
+// 🤝 팀원들이 만든 파일들 불러오기
+import 'core/workout_data.dart';
+import 'data/models/user_model.dart';
+import 'data/exp_service.dart';
+import 'data/workout_service.dart';
+import 'ai/rep_counter.dart';
+import 'core/models/pose_result.dart'; 
+
 List<CameraDescription> cameras = [];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  cameras = await availableCameras();
+  try {
+    cameras = await availableCameras();
+  } catch (e) {
+    print("카메라를 찾을 수 없습니다. (에뮬레이터/윈도우 환경 체크)");
+  }
   runApp(const HelmagotchiApp());
 }
 
@@ -25,7 +37,7 @@ class HelmagotchiApp extends StatelessWidget {
 }
 
 // ==========================================
-// 🏠 1. 메인 홈 화면
+// 🏠 1. 메인 홈 화면 (BE 로직 연동)
 // ==========================================
 class MainHomeScreen extends StatefulWidget {
   const MainHomeScreen({super.key});
@@ -35,10 +47,13 @@ class MainHomeScreen extends StatefulWidget {
 }
 
 class _MainHomeScreenState extends State<MainHomeScreen> {
-  int myLevel = 1;
-  double myExp = 0.0; // 0.0 ~ 1.0
-  int myTotalSquats = 0;
+  // 💾 BE2 팀원의 UserModel 적용!
+  UserModel myUser = UserModel(uid: 'helma_test_01', level: 1, currentExp: 0);
   
+  // 💾 BE1 팀원의 ExpService 적용!
+  final ExpService _expService = ExpService();
+  
+  int myTotalSquats = 0;
   List<bool> dailyWorkouts = [false, false, false];
 
   void _showWorkoutPopup() {
@@ -49,7 +64,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              backgroundColor: Colors.grey[850], // 팝업 배경
+              backgroundColor: Colors.grey[850],
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -70,23 +85,18 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                     padding: const EdgeInsets.only(bottom: 10),
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        // 🎨 가시성 대폭 수정!
-                        // 배경(grey[850]) 위에서 확연히 구분되도록 완료된 버튼을 밝은 회색(grey[600])으로 변경
                         backgroundColor: isDone ? Colors.grey[600] : Colors.greenAccent,
-                        // 글자/아이콘 색상도 어두운 배경에 맞게 조정
                         foregroundColor: isDone ? Colors.white : Colors.black,
                         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                         minimumSize: const Size(double.infinity, 50),
-                        elevation: isDone ? 0 : 2, // 완료된건 그림자 없앰
+                        elevation: isDone ? 0 : 2,
                       ),
                       onPressed: isDone ? null : () async {
                         final result = await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => CameraWorkoutScreen(
-                              startLevel: myLevel, 
-                              startSquats: myTotalSquats,
                               workoutIndex: index, 
                             ),
                           ),
@@ -94,14 +104,22 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 
                         if (result != null) {
                           setState(() {
-                            myTotalSquats = result['squats'];
+                            // 운동 완료 후 결과 처리
                             if (result['isCompleted'] == true) {
                               dailyWorkouts[result['completedIndex']] = true;
-                              myExp += 0.34; 
-                              if (myExp >= 0.99) {
-                                myLevel++;
-                                myExp = 0.0;
+                              
+                              int completedReps = result['reps'] ?? 0;
+                              myTotalSquats += completedReps;
+
+                              // 🎁 BE1 팀원의 로직 호출! (수행한 스쿼트 개수만큼 경험치 획득)
+                              for (int i = 0; i < completedReps; i++) {
+                                myUser = _expService.addExpByWorkout(myUser, WorkoutType.squat);
                               }
+
+                              // BE2 팀원의 WorkoutService 연동 (기록 저장용)
+                              WorkoutService().handleMovement(
+                                WorkoutEvent(type: WorkoutType.squat, timestamp: DateTime.now())
+                              );
                             }
                           });
                           setDialogState(() {}); 
@@ -116,14 +134,12 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                               fontSize: 18, 
                               fontWeight: FontWeight.bold,
                               decoration: isDone ? TextDecoration.lineThrough : null, 
-                              // 완료된 글자는 약간 투명하게
                               color: isDone ? Colors.white.withOpacity(0.7) : Colors.black,
                             )
                           ),
                           Icon(
                             isDone ? Icons.check_circle : Icons.play_circle_fill, 
                             size: 28, 
-                            // 체크 마크는 형광 초록색 고수 (잘 보임)
                             color: isDone ? Colors.greenAccent : Colors.black
                           ),
                         ],
@@ -141,9 +157,10 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 경험치 퍼센트 계산 (텍스트용)
-    int expPercentage = (myExp * 100).toInt();
-    if(expPercentage > 100) expPercentage = 100;
+    // BE1 로직에 따른 다음 레벨업 필요 경험치 계산 (레벨 * 100)
+    int requiredExp = myUser.level * 100;
+    double expRatio = myUser.currentExp / requiredExp;
+    if (expRatio > 1.0) expRatio = 1.0;
 
     return Scaffold(
       backgroundColor: Colors.grey[900],
@@ -151,42 +168,38 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('Lv.$myLevel 헬린이', style: const TextStyle(fontSize: 30, color: Colors.white, fontWeight: FontWeight.bold)),
+            Text('Lv.${myUser.level} 헬린이', style: const TextStyle(fontSize: 30, color: Colors.white, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
             
-            // 🌟 텍스트를 포함하는 커스텀 경험치 게이지 바!
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 50), // 바 가로 길이 조정
+              padding: const EdgeInsets.symmetric(horizontal: 50), 
               child: Container(
-                height: 25, // 바 높이 약간 키움
+                height: 25, 
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1), // 바 배경색
+                  color: Colors.white.withOpacity(0.1), 
                   borderRadius: BorderRadius.circular(15),
                 ),
-                child: Stack( // 겹치기 기술 사용!
+                child: Stack( 
                   children: [
-                    // 1층: 차오르는 게이지 (애니메이션 효과)
                     AnimatedContainer(
-                      duration: const Duration(milliseconds: 500), // 게이지 찰 때 부드럽게
+                      duration: const Duration(milliseconds: 500), 
                       curve: Curves.easeInOut,
-                      width: (MediaQuery.of(context).size.width - 100) * myExp, // 화면 너비 기반 계산
+                      width: (MediaQuery.of(context).size.width - 100) * expRatio, 
                       decoration: BoxDecoration(
-                        color: Colors.greenAccent, // 차오르는 색상
+                        color: Colors.greenAccent, 
                         borderRadius: BorderRadius.circular(15),
                       ),
                     ),
-                    // 2층: 우측 정렬 텍스트
                     Align(
-                      alignment: Alignment.centerRight, // 우측 중앙 정렬
+                      alignment: Alignment.centerRight, 
                       child: Padding(
-                        padding: const EdgeInsets.only(right: 12), // 우측 여백
+                        padding: const EdgeInsets.only(right: 12), 
                         child: Text(
-                          '$expPercentage / 100 XP', // 👈 요청하신 텍스트 형식
+                          '${myUser.currentExp} / $requiredExp XP', 
                           style: const TextStyle(
-                            color: Colors.white, // 배경색에 관계없이 잘 보이도록 흰색
+                            color: Colors.white, 
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
-                            // 글자가 게이지 색에 묻히지 않도록 그림자 살짝 추가
                             shadows: [Shadow(color: Colors.black54, blurRadius: 2)],
                           ),
                         ),
@@ -225,34 +238,25 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 }
 
 // ==========================================
-// 📸 2. 카메라 운동 화면 (변화 없음)
+// 📸 2. 카메라 운동 화면 (AI 로직 연동)
 // ==========================================
 class CameraWorkoutScreen extends StatefulWidget {
-  final int startLevel;
-  final int startSquats;
   final int workoutIndex; 
 
-  const CameraWorkoutScreen({
-    super.key, 
-    required this.startLevel, 
-    required this.startSquats,
-    required this.workoutIndex,
-  });
+  const CameraWorkoutScreen({super.key, required this.workoutIndex});
 
   @override
   State<CameraWorkoutScreen> createState() => _CameraWorkoutScreenState();
 }
 
 class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
-  late CameraController _controller;
+  CameraController? _controller;
   bool _isCameraInitialized = false;
 
-  late int currentLevel;
-  late int totalSquatCount; 
+  // 🤖 AI 팀원의 상태 머신 로직 적용!
+  final SquatRepCounter _repCounter = SquatRepCounter();
   
   int currentSet = 1;          
-  int squatsInCurrentSet = 0;  
-  
   bool isResting = false;      
   int restTimeLeft = 5;        
   Timer? _restTimer;           
@@ -260,21 +264,28 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
   @override
   void initState() {
     super.initState();
-    currentLevel = widget.startLevel;
-    totalSquatCount = widget.startSquats;
+    if (cameras.isNotEmpty) {
+      _controller = CameraController(cameras[0], ResolutionPreset.high);
+      _controller!.initialize().then((_) {
+        if (!mounted) return;
+        setState(() => _isCameraInitialized = true);
+        
+        // 🚨 실제 모바일 기기 테스트 시 아래 주석을 풀고 AI 프레임 분석을 시작해야 합니다.
+        // _controller!.startImageStream((CameraImage image) {
+        //   // 1. CameraImage -> ML Kit InputImage 변환 로직
+        //   // 2. PoseDetector로 뼈대 추출 -> PoseAnalyzer.analyze() 호출
+        //   // 3. 반환된 PoseResult를 _repCounter.update(poseResult)에 전달
+        // });
 
-    _controller = CameraController(cameras[0], ResolutionPreset.high);
-    _controller.initialize().then((_) {
-      if (!mounted) return;
-      setState(() => _isCameraInitialized = true);
-    }).catchError((Object e) {
-      print('카메라 오류: $e');
-    });
+      }).catchError((Object e) {
+        print('카메라 오류: $e');
+      });
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     _restTimer?.cancel(); 
     super.dispose();
   }
@@ -292,21 +303,28 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
         } else {
           isResting = false;
           currentSet++;
-          squatsInCurrentSet = 0; 
+          _repCounter.reset(); // 다음 세트를 위해 AI 카운터 초기화!
           timer.cancel(); 
         }
       });
     });
   }
 
-  void _onSquatDetected() {
+  // 🧪 윈도우 환경 테스트용 가짜 AI 업데이트 함수
+  void _triggerMockAIUpdate() {
     if (isResting) return; 
-
     setState(() {
-      squatsInCurrentSet++;
-      totalSquatCount++;
+      // 🤖 AI 팀원의 깐깐한 상태 머신을 통과하기 위한 완벽한 4단계 스쿼트!
+      // 1. 서 있다가 내려가기 시작 (120도)
+      _repCounter.update(const PoseResult(leftKneeAngle: 120, rightKneeAngle: 120, leftHipAngle: 100, landmarks: {}, confidence: 0.99));
+      // 2. 완전히 앉음 (90도)
+      _repCounter.update(const PoseResult(leftKneeAngle: 90, rightKneeAngle: 90, leftHipAngle: 100, landmarks: {}, confidence: 0.99));
+      // 3. 다시 올라오기 시작 (140도)
+      _repCounter.update(const PoseResult(leftKneeAngle: 140, rightKneeAngle: 140, leftHipAngle: 100, landmarks: {}, confidence: 0.99));
+      // 4. 완전히 일어섬 (170도) -> 여기서 드디어 카운트 1 증가!
+      _repCounter.update(const PoseResult(leftKneeAngle: 170, rightKneeAngle: 170, leftHipAngle: 100, landmarks: {}, confidence: 0.99));
 
-      if (squatsInCurrentSet == 10) {
+      if (_repCounter.reps >= 10) {
         if (currentSet < 3) {
           _startRestTimer();
         } else {
@@ -323,14 +341,14 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[800],
         title: const Text('🎉 오운완!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: const Text('오늘의 3세트 목표를 모두 달성했습니다!\n다마고치가 경험치를 얻습니다.', style: TextStyle(color: Colors.white70)),
+        content: const Text('오늘의 3세트 목표를 모두 달성했습니다!\n경험치가 팍팍 오릅니다!', style: TextStyle(color: Colors.white70)),
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent, foregroundColor: Colors.black),
             onPressed: () {
               Navigator.pop(context); 
               Navigator.pop(context, {
-                'squats': totalSquatCount,
+                'reps': currentSet * 10, // 총 30개 수행 완료
                 'completedIndex': widget.workoutIndex,
                 'isCompleted': true 
               }); 
@@ -349,17 +367,15 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            _isCameraInitialized 
-                ? SizedBox(width: double.infinity, height: double.infinity, child: CameraPreview(_controller))
-                : const Center(child: CircularProgressIndicator(color: Colors.white)),
+            _isCameraInitialized && _controller != null
+                ? SizedBox(width: double.infinity, height: double.infinity, child: CameraPreview(_controller!))
+                : const Center(child: Text("카메라 대기 중 (모바일에서 확인)", style: TextStyle(color: Colors.white))),
             
             Positioned(
               top: 20, left: 20,
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white, size: 40),
-                onPressed: () {
-                  Navigator.pop(context, {'squats': totalSquatCount});
-                }
+                onPressed: () => Navigator.pop(context)
               ),
             ),
 
@@ -371,7 +387,16 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Lv.$currentLevel 헬린이', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(color: Colors.black, blurRadius: 5)])),
+                      // 🤖 AI 팀원의 자세 피드백을 실시간으로 화면에 띄워줍니다!
+                      Text(
+                        _repCounter.lastJudgement.isGoodForm ? '자세 완벽해요!' : _repCounter.lastJudgement.feedback ?? '자세 주의', 
+                        style: TextStyle(
+                          fontSize: 20, 
+                          fontWeight: FontWeight.bold, 
+                          color: _repCounter.lastJudgement.isGoodForm ? Colors.greenAccent : Colors.redAccent,
+                          shadows: const [Shadow(color: Colors.black, blurRadius: 5)]
+                        )
+                      ),
                       Text('$currentSet / 3 세트', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.greenAccent, shadows: [Shadow(color: Colors.black, blurRadius: 5)])),
                     ],
                   ),
@@ -379,7 +404,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: LinearProgressIndicator(
-                      value: squatsInCurrentSet / 10.0, 
+                      value: _repCounter.reps / 10.0, 
                       minHeight: 20,
                       backgroundColor: Colors.white.withOpacity(0.3),
                       color: Colors.greenAccent,
@@ -393,7 +418,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
               bottom: 100, left: 0, right: 0,
               child: Center(
                 child: Text(
-                  '이번 세트: $squatsInCurrentSet / 10회', 
+                  '이번 세트: ${_repCounter.reps} / 10회', 
                   style: const TextStyle(fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold, shadows: [Shadow(color: Colors.black, blurRadius: 5)]),
                 ),
               ),
@@ -402,16 +427,13 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
             if (isResting)
               Container(
                 color: Colors.black.withOpacity(0.8), 
-                width: double.infinity,
-                height: double.infinity,
+                width: double.infinity, height: double.infinity,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Text('숨 고르기!', style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
                     const SizedBox(height: 20),
                     Text('$restTimeLeft초', style: const TextStyle(fontSize: 80, fontWeight: FontWeight.bold, color: Colors.white)),
-                    const SizedBox(height: 20),
-                    const Text('근육이 성장하고 있어요! 💪', style: TextStyle(fontSize: 20, color: Colors.white70)),
                   ],
                 ),
               ),
@@ -419,8 +441,9 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
         ),
       ),
       
+      // 🧪 윈도우 테스트용 가짜 스쿼트 발생 버튼
       floatingActionButton: isResting ? null : FloatingActionButton(
-        onPressed: _onSquatDetected,
+        onPressed: _triggerMockAIUpdate,
         backgroundColor: Colors.greenAccent,
         child: const Icon(Icons.add, color: Colors.black),
       ),
