@@ -170,7 +170,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           children: [
             Text('Lv.${myUser.level} 헬린이', style: const TextStyle(fontSize: 30, color: Colors.white, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 50), 
               child: Container(
@@ -212,14 +212,32 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             const SizedBox(height: 20),
             
             Text('누적 스쿼트: $myTotalSquats회', style: const TextStyle(fontSize: 18, color: Colors.greenAccent)),
-            const SizedBox(height: 40),
+            const SizedBox(height: 20),
             
-            Container(
-              width: 200, height: 200,
-              decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.greenAccent.withOpacity(0.5), blurRadius: 30, spreadRadius: 10)]),
-              child: const Icon(Icons.pets, size: 100, color: Colors.green),
+            Builder(
+              builder: (context) {
+                // 🧠 진화 단계 계산 로직
+                String petImagePath = 'assets/images/level_1.png'; // 기본 1단계 이미지
+                
+                if (myUser.level >= 6) {
+                  petImagePath = 'assets/images/level_3.png'; // 레벨 6 이상: 3단계 최종 진화!
+                } else if (myUser.level >= 3) {
+                  petImagePath = 'assets/images/level_2.png'; // 레벨 3 이상: 2단계 진화!
+                }
+
+                // 🚀 [반응형 크기 적용!]
+                return SizedBox( 
+                  // 현재 폰 가로 길이의 80% 크기로 자동 맞춤! (0.8을 0.9로 바꾸면 90%가 됩니다)
+                  width: MediaQuery.of(context).size.width * 0.8, 
+                  height: MediaQuery.of(context).size.width * 0.8, 
+                  child: Image.asset(
+                    petImagePath, 
+                    fit: BoxFit.contain,
+                  ),
+                );
+              }
             ),
-            const SizedBox(height: 80),
+            const SizedBox(height: 20),
             
             ElevatedButton(
               style: ElevatedButton.styleFrom(
