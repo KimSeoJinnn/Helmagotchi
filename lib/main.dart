@@ -265,7 +265,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
   void initState() {
     super.initState();
     if (cameras.isNotEmpty) {
-      _controller = CameraController(cameras[0], ResolutionPreset.high);
+      _controller = CameraController(cameras[1], ResolutionPreset.high);
       _controller!.initialize().then((_) {
         if (!mounted) return;
         setState(() => _isCameraInitialized = true);
