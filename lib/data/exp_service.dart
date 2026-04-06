@@ -1,4 +1,4 @@
-import 'models/user_model.dart';
+import 'user_model.dart';
 import '../core/workout_data.dart';
 
 class ExpService {

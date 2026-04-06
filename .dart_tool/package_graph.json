@@ -8,9 +8,9 @@
       "version": "1.0.0+1",
       "dependencies": [
         "camera",
-        "camera_windows",
         "cupertino_icons",
-        "flutter"
+        "flutter",
+        "google_mlkit_pose_detection"
       ],
       "devDependencies": [
         "flutter_lints",
@@ -43,13 +43,11 @@
       ]
     },
     {
-      "name": "camera_windows",
-      "version": "0.2.6+4",
+      "name": "google_mlkit_pose_detection",
+      "version": "0.14.1",
       "dependencies": [
-        "camera_platform_interface",
-        "cross_file",
         "flutter",
-        "stream_transform"
+        "google_mlkit_commons"
       ]
     },
     {
@@ -171,26 +169,10 @@
       ]
     },
     {
-      "name": "stream_transform",
-      "version": "2.1.1",
-      "dependencies": []
-    },
-    {
-      "name": "cross_file",
-      "version": "0.3.5+2",
+      "name": "google_mlkit_commons",
+      "version": "0.11.1",
       "dependencies": [
-        "meta",
-        "web"
-      ]
-    },
-    {
-      "name": "camera_platform_interface",
-      "version": "2.12.0",
-      "dependencies": [
-        "cross_file",
-        "flutter",
-        "plugin_platform_interface",
-        "stream_transform"
+        "flutter"
       ]
     },
     {
@@ -209,6 +191,16 @@
         "flutter_web_plugins",
         "stream_transform",
         "web"
+      ]
+    },
+    {
+      "name": "camera_platform_interface",
+      "version": "2.12.0",
+      "dependencies": [
+        "cross_file",
+        "flutter",
+        "plugin_platform_interface",
+        "stream_transform"
       ]
     },
     {
@@ -311,6 +303,18 @@
       "dependencies": []
     },
     {
+      "name": "stream_transform",
+      "version": "2.1.1",
+      "dependencies": []
+    },
+    {
+      "name": "flutter_web_plugins",
+      "version": "0.0.0",
+      "dependencies": [
+        "flutter"
+      ]
+    },
+    {
       "name": "plugin_platform_interface",
       "version": "2.1.8",
       "dependencies": [
@@ -318,10 +322,11 @@
       ]
     },
     {
-      "name": "flutter_web_plugins",
-      "version": "0.0.0",
+      "name": "cross_file",
+      "version": "0.3.5+2",
       "dependencies": [
-        "flutter"
+        "meta",
+        "web"
       ]
     },
     {

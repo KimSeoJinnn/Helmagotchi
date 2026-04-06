@@ -44,12 +44,6 @@
       "languageVersion": "3.8"
     },
     {
-      "name": "camera_windows",
-      "rootUri": "file:///C:/Users/USER/AppData/Local/Pub/Cache/hosted/pub.dev/camera_windows-0.2.6+4",
-      "packageUri": "lib/",
-      "languageVersion": "3.8"
-    },
-    {
       "name": "characters",
       "rootUri": "file:///C:/Users/USER/AppData/Local/Pub/Cache/hosted/pub.dev/characters-1.4.1",
       "packageUri": "lib/",
@@ -114,6 +108,18 @@
       "rootUri": "file:///C:/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",
       "languageVersion": "3.9"
+    },
+    {
+      "name": "google_mlkit_commons",
+      "rootUri": "file:///C:/Users/USER/AppData/Local/Pub/Cache/hosted/pub.dev/google_mlkit_commons-0.11.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.8"
+    },
+    {
+      "name": "google_mlkit_pose_detection",
+      "rootUri": "file:///C:/Users/USER/AppData/Local/Pub/Cache/hosted/pub.dev/google_mlkit_pose_detection-0.14.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.8"
     },
     {
       "name": "leak_tracker",
