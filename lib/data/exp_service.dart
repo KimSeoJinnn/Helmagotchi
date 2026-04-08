@@ -2,7 +2,7 @@ import 'user_model.dart';
 import '../core/workout_data.dart';
 
 class ExpService {
-  static const int squatExp = 2;
+  static const int squatExp = 10;
   static const int pushupExp = 3;
   static const int situpExp = 2;
 
