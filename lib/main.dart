@@ -13,7 +13,6 @@ import 'data/exp_service.dart';
 import 'data/workout_service.dart';
 import 'ai/rep_counter.dart';
 import 'core/models/pose_result.dart';
-// 🚀 [추가] 칭호 서비스 임포트
 import 'data/title_service.dart'; 
 
 List<CameraDescription> cameras = [];
@@ -49,20 +48,98 @@ class MainHomeScreen extends StatefulWidget {
   const MainHomeScreen({super.key});
 
   @override
+  // 🚀 [수정 1] with SingleTickerProviderStateMixin 추가! (애니메이션을 위한 필수 장착템)
   State<MainHomeScreen> createState() => _MainHomeScreenState();
 }
 
-class _MainHomeScreenState extends State<MainHomeScreen> {
+class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProviderStateMixin {
   UserModel myUser = UserModel(uid: 'helma_test_01', level: 1, currentExp: 0);
 
   final ExpService _expService = ExpService();
   final TitleService _titleService = TitleService(); 
 
   int myTotalSquats = 0;
+  String? _selectedTitle;
 
-  // 🚀 멋진 칭호 도감 바텀 시트 UI
+  // 🚀 [수정 2] 애니메이션 조종 변수 선언
+  late AnimationController _idleController;
+  late Animation<double> _idleAnimation;
+
+  // 🚀 [수정 3] 홈 화면이 켜질 때 애니메이션을 시작하는 initState 추가
+  @override
+  void initState() {
+    super.initState();
+    // 2초 동안 위아래로 자연스럽게 움직이는 애니메이션 세팅
+    _idleController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true); // 무한 반복!
+
+    _idleAnimation = Tween<double>(begin: -10, end: 10).animate(
+      CurvedAnimation(parent: _idleController, curve: Curves.easeInOut),
+    );
+  }
+
+  // 🚀 [수정 4] 홈 화면이 꺼질 때 애니메이션도 같이 꺼주는 dispose 추가
+  @override
+  void dispose() {
+    _idleController.dispose();
+    super.dispose();
+  }
+
+  void _showNewTitlePopup(dynamic newTitle) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Center(
+          child: Text('🎉 새로운 칭호 획득!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.workspace_premium, color: Colors.amber, size: 80),
+            const SizedBox(height: 15),
+            Text(
+              newTitle.name, 
+              style: const TextStyle(color: Colors.greenAccent, fontSize: 28, fontWeight: FontWeight.bold)
+            ),
+            const SizedBox(height: 10),
+            Text(
+              newTitle.description, 
+              style: const TextStyle(color: Colors.white70, fontSize: 16)
+            ),
+          ]
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('닫기', style: TextStyle(color: Colors.grey, fontSize: 16)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.greenAccent,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () {
+              setState(() {
+                _selectedTitle = newTitle.name; 
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('지금 장착하기', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+        ],
+      )
+    );
+  }
+
   void _showTitleListSheet() {
     final unlockedTitles = _titleService.getUnlockedTitles(myUser);
+    String currentDisplayTitle = _selectedTitle ?? _titleService.getLatestUnlockedTitle(myUser)?.name ?? "헬린이";
 
     showModalBottomSheet(
       context: context,
@@ -72,65 +149,86 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).padding.bottom,
-            top: 30,
-            left: 20,
-            right: 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                '🏆 내 칭호 도감',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+        return StatefulBuilder( 
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom,
+                top: 30,
+                left: 20,
+                right: 20,
               ),
-              const SizedBox(height: 20),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _titleService.allTitles.length,
-                itemBuilder: (context, index) {
-                  final title = _titleService.allTitles[index];
-                  final isUnlocked = unlockedTitles.any((t) => t.name == title.name);
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '🏆 내 칭호 도감',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(height: 20),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _titleService.allTitles.length,
+                    itemBuilder: (context, index) {
+                      final title = _titleService.allTitles[index];
+                      final isUnlocked = unlockedTitles.any((t) => t.name == title.name);
+                      final isSelected = currentDisplayTitle == title.name; 
 
-                  return Card(
-                    color: isUnlocked ? Colors.greenAccent.withOpacity(0.1) : Colors.grey[850],
-                    shape: RoundedRectangleBorder(
-                      side: BorderSide(
-                        color: isUnlocked ? Colors.greenAccent : Colors.transparent,
-                        width: 1,
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: ListTile(
-                      leading: Icon(
-                        isUnlocked ? Icons.workspace_premium : Icons.lock,
-                        color: isUnlocked ? Colors.greenAccent : Colors.grey[600],
-                        size: 30,
-                      ),
-                      title: Text(
-                        title.name,
-                        style: TextStyle(
-                          color: isUnlocked ? Colors.white : Colors.grey[500],
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
+                      return Card(
+                        color: isUnlocked ? Colors.greenAccent.withOpacity(0.1) : Colors.grey[850],
+                        shape: RoundedRectangleBorder(
+                          side: BorderSide(
+                            color: isSelected ? Colors.greenAccent : (isUnlocked ? Colors.greenAccent.withOpacity(0.3) : Colors.transparent),
+                            width: isSelected ? 2 : 1, 
+                          ),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                      ),
-                      subtitle: Text(
-                        title.description,
-                        style: TextStyle(
-                          color: isUnlocked ? Colors.greenAccent.withOpacity(0.8) : Colors.grey[600],
+                        child: ListTile(
+                          onTap: isUnlocked ? () {
+                            setState(() {
+                              _selectedTitle = title.name;
+                            });
+                            Navigator.pop(context); 
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('칭호가 [${title.name}](으)로 변경되었습니다!'),
+                                backgroundColor: Colors.green,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          } : null,
+                          leading: Icon(
+                            isUnlocked ? Icons.workspace_premium : Icons.lock,
+                            color: isSelected ? Colors.greenAccent : (isUnlocked ? Colors.greenAccent.withOpacity(0.5) : Colors.grey[600]),
+                            size: 30,
+                          ),
+                          title: Text(
+                            title.name,
+                            style: TextStyle(
+                              color: isUnlocked ? Colors.white : Colors.grey[500],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          subtitle: Text(
+                            title.description,
+                            style: TextStyle(
+                              color: isUnlocked ? Colors.greenAccent.withOpacity(0.8) : Colors.grey[600],
+                            ),
+                          ),
+                          trailing: isSelected 
+                            ? const Icon(Icons.check_circle, color: Colors.greenAccent) 
+                            : null,
                         ),
-                      ),
-                    ),
-                  );
-                },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 30),
+                ],
               ),
-              const SizedBox(height: 30),
-            ],
-          ),
+            );
+          }
         );
       },
     );
@@ -142,13 +240,14 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     double expRatio = myUser.currentExp / requiredExp;
     if (expRatio > 1.0) expRatio = 1.0;
 
+    String displayTitle = _selectedTitle ?? _titleService.getLatestUnlockedTitle(myUser)?.name ?? "헬린이";
+
     return Scaffold(
       backgroundColor: Colors.grey[900],
       body: SafeArea(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 🚀 터치하면 도감이 열리고, 최신 칭호가 뜨도록 변경!
             GestureDetector(
               onTap: _showTitleListSheet,
               child: Container(
@@ -162,7 +261,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Lv.${myUser.level} ${_titleService.getLatestUnlockedTitle(myUser)?.name ?? "헬린이"}',
+                      'Lv.${myUser.level} $displayTitle', 
                       style: const TextStyle(
                         fontSize: 28,
                         color: Colors.white,
@@ -170,7 +269,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    const Icon(Icons.info_outline, color: Colors.greenAccent, size: 24),
+                    const Icon(Icons.edit, color: Colors.greenAccent, size: 20), 
                   ],
                 ),
               ),
@@ -235,10 +334,20 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   petImagePath = 'assets/images/level_2.png'; 
                 }
 
-                return SizedBox(
-                  width: MediaQuery.of(context).size.width * 0.8,
-                  height: MediaQuery.of(context).size.width * 0.8,
-                  child: Image.asset(petImagePath, fit: BoxFit.contain),
+                // 🚀 [수정 5] 만들어둔 애니메이션에 캐릭터 이미지를 탑승시킵니다!
+                return AnimatedBuilder(
+                  animation: _idleAnimation,
+                  builder: (context, child) {
+                    return Transform.translate(
+                      offset: Offset(0, _idleAnimation.value), // Y축으로 오르락내리락
+                      child: child,
+                    );
+                  },
+                  child: SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    child: Image.asset(petImagePath, fit: BoxFit.contain),
+                  ),
                 );
               },
             ),
@@ -253,7 +362,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   borderRadius: BorderRadius.circular(30),
                 ),
               ),
-              // 🚀 팝업창 없이 바로 카메라 화면으로 이동!
               onPressed: () async {
                 final result = await Navigator.push(
                   context,
@@ -262,30 +370,37 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   ),
                 );
 
-                // 카메라 화면에서 전달받은 결과 처리
                 if (result != null) {
-                  setState(() {
-                    int completedReps = result['reps'] ?? 0;
-                    if (completedReps > 0) {
-                      myTotalSquats += completedReps;
-                      myUser.totalSquatCount += completedReps; // 칭호 해금을 위해 누적 스쿼트 추가!
+                  int completedReps = result['reps'] ?? 0;
+                  if (completedReps > 0) {
+                    
+                    int titlesCountBeforeWorkout = _titleService.getUnlockedTitles(myUser).length;
 
-                      // BE1 팀원의 로직 호출 (경험치 획득)
+                    setState(() {
+                      myTotalSquats += completedReps;
+                      myUser.totalSquatCount += completedReps; 
+
                       myUser = _expService.addExpByWorkout(
                         myUser,
                         WorkoutType.squat,
                         completedReps,
                       );
 
-                      // BE2 팀원의 WorkoutService 연동 (기록 저장용)
                       WorkoutService().handleMovement(
                         WorkoutEvent(
                           type: WorkoutType.squat,
                           timestamp: DateTime.now(),
                         ),
                       );
+                    });
+
+                    final titlesAfterWorkout = _titleService.getUnlockedTitles(myUser);
+                    if (titlesAfterWorkout.length > titlesCountBeforeWorkout) {
+                      Future.delayed(const Duration(milliseconds: 500), () {
+                        _showNewTitlePopup(titlesAfterWorkout.last);
+                      });
                     }
-                  });
+                  }
                 }
               },
               child: const Text(
@@ -304,7 +419,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 // 📸 2. 카메라 운동 화면 (AI 로직 연동)
 // ==========================================
 class CameraWorkoutScreen extends StatefulWidget {
-  const CameraWorkoutScreen({super.key}); // 🚀 index 매개변수 제거
+  const CameraWorkoutScreen({super.key}); 
 
   @override
   State<CameraWorkoutScreen> createState() => _CameraWorkoutScreenState();
@@ -318,7 +433,6 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
   final PoseDetector _poseDetector = PoseDetector(options: PoseDetectorOptions());
   bool _isProcessing = false;
 
-  // 🚀 세트 관련 변수 삭제 완료
   bool isPreparing = true; 
   int prepTimeLeft = 3;
 
@@ -340,7 +454,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
             _startPrepTimer();
 
             _controller!.startImageStream((CameraImage image) async {
-              if (isPreparing || _isProcessing) return; // 🚀 휴식(isResting) 조건 제거
+              if (isPreparing || _isProcessing) return; 
               
               _isProcessing = true;
 
@@ -384,8 +498,6 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
                   if (poseResult != null) {
                     setState(() {
                       _repCounter.update(poseResult); 
-                      // 🚀 10개 달성 시 자동 종료되는 로직(세트 휴식) 삭제! 
-                      // 무한으로 개수가 올라갑니다.
                     });
                   }
                 }
@@ -428,7 +540,46 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
 
   // 🚀 운동 종료 및 경험치 확인 팝업
   void _showWorkoutCompleteDialog() {
-    // 획득할 경험치 미리 계산 (스쿼트 개수 * 스쿼트 경험치율(2))
+    // 🚀 [추가 1] 1개도 안 했을 때의 팝업 처리!
+    if (_repCounter.reps == 0) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.grey[800],
+          title: const Text(
+            '👀 앗!',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            '아직 스쿼트를 1개도 하지 않았습니다.\n이대로 운동을 종료할까요?',
+            style: TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context), // 🚀 팝업만 닫고 운동 계속하기
+              child: const Text('계속하기', style: TextStyle(color: Colors.grey, fontSize: 16)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(context); // 팝업 닫기
+                Navigator.pop(context, {
+                  'reps': 0, // 🚀 홈 화면으로 0개를 들고 돌아가기
+                });
+              },
+              child: const Text('종료하기'),
+            ),
+          ],
+        ),
+      );
+      return; // 🚀 0개일 때는 아래의 성공 팝업이 뜨지 않도록 여기서 함수를 끝냅니다!
+    }
+
+    // 🚀 [기존 로직] 1개 이상 했을 때의 성공 팝업
     int earnedExp = _repCounter.reps * ExpService.squatExp;
 
     showDialog(
@@ -441,7 +592,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         content: Text(
-          '스쿼트 ${_repCounter.reps}회 완료!\n$earnedExp 경험치 획득!', // 🚀 변경된 텍스트
+          '스쿼트 ${_repCounter.reps}회 완료!\n$earnedExp 경험치 획득!', 
           style: const TextStyle(color: Colors.white70, fontSize: 18),
         ),
         actions: [
@@ -451,8 +602,8 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
               foregroundColor: Colors.black,
             ),
             onPressed: () {
-              Navigator.pop(context); // 팝업 닫기
-              Navigator.pop(context, { // 홈 화면으로 횟수와 함께 돌아가기
+              Navigator.pop(context); 
+              Navigator.pop(context, { 
                 'reps': _repCounter.reps, 
               });
             },
@@ -484,15 +635,6 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
                   ),
 
             Positioned(
-              top: 20,
-              left: 20,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 40),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-
-            Positioned(
               top: 80,
               left: 20,
               right: 20,
@@ -515,7 +657,6 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
                           shadows: const [Shadow(color: Colors.black, blurRadius: 5)],
                         ),
                       ),
-                      // 🚀 세트 텍스트 자리에 '운동 종료' 버튼 배치!
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.redAccent,
@@ -529,7 +670,6 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
                       ),
                     ],
                   ),
-                  // 🚀 프로그레스 바(게이지 바) 삭제 완료!
                 ],
               ),
             ),
@@ -539,7 +679,6 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
               left: 0,
               right: 0,
               child: Center(
-                // 🚀 진행 중인 스쿼트 횟수만 깔끔하게 표시
                 child: Text(
                   '${_repCounter.reps} 회',
                   style: const TextStyle(
