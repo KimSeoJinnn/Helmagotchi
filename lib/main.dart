@@ -11,6 +11,7 @@ import 'core/workout_data.dart';
 import 'data/user_model.dart';
 import 'data/exp_service.dart';
 import 'data/workout_service.dart';
+import 'data/title_service.dart';
 import 'ai/rep_counter.dart';
 import 'core/models/pose_result.dart';
 
@@ -59,6 +60,9 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   // 💾 BE1 팀원의 ExpService 적용!
   final ExpService _expService = ExpService();
 
+  // 🚀 [추가!] TitleService 장착!
+  final TitleService _titleService = TitleService();
+  
   int myTotalSquats = 0;
   List<bool> dailyWorkouts = [false, false, false];
 
@@ -134,6 +138,9 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                                     int completedReps = result['reps'] ?? 0;
                                     myTotalSquats += completedReps;
 
+                                    // 🚀 [추가!] UserModel 안의 진짜 스쿼트 누적 횟수도 올려줘야 칭호가 해금됩니다!
+                                    myUser.totalSquatCount += completedReps;
+
                                     // 🎁 BE1 팀원의 로직 호출! (수행한 스쿼트 개수만큼 한 번에 경험치 획득)
                                     myUser = _expService.addExpByWorkout(
                                       myUser,
@@ -189,6 +196,83 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
+  // 🚀 [추가!] 멋진 칭호 도감 바텀 시트 UI
+  void _showTitleListSheet() {
+    final unlockedTitles = _titleService.getUnlockedTitles(myUser);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).padding.bottom,
+            top: 30,
+            left: 20,
+            right: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '🏆 내 칭호 도감',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 20),
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _titleService.allTitles.length,
+                itemBuilder: (context, index) {
+                  final title = _titleService.allTitles[index];
+                  // 현재 칭호가 해금된 칭호 목록에 있는지 확인
+                  final isUnlocked = unlockedTitles.any((t) => t.name == title.name);
+
+                  return Card(
+                    color: isUnlocked ? Colors.greenAccent.withOpacity(0.1) : Colors.grey[850],
+                    shape: RoundedRectangleBorder(
+                      side: BorderSide(
+                        color: isUnlocked ? Colors.greenAccent : Colors.transparent,
+                        width: 1,
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: ListTile(
+                      leading: Icon(
+                        isUnlocked ? Icons.workspace_premium : Icons.lock,
+                        color: isUnlocked ? Colors.greenAccent : Colors.grey[600],
+                        size: 30,
+                      ),
+                      title: Text(
+                        title.name,
+                        style: TextStyle(
+                          color: isUnlocked ? Colors.white : Colors.grey[500],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      subtitle: Text(
+                        title.description,
+                        style: TextStyle(
+                          color: isUnlocked ? Colors.greenAccent.withOpacity(0.8) : Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 30),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // BE1 로직에 따른 다음 레벨업 필요 경험치 계산 (레벨 * 100)
@@ -202,12 +286,31 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              'Lv.${myUser.level} 헬린이',
-              style: const TextStyle(
-                fontSize: 30,
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+            // 🚀 [수정!] 터치하면 도감이 열리고, 최신 칭호가 뜨도록 변경!
+            GestureDetector(
+              onTap: _showTitleListSheet,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Lv.${myUser.level} ${_titleService.getLatestUnlockedTitle(myUser)?.name ?? "헬린이"}',
+                      style: const TextStyle(
+                        fontSize: 28,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Icon(Icons.info_outline, color: Colors.greenAccent, size: 24),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -266,12 +369,12 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 // 🧠 진화 단계 계산 로직
                 String petImagePath = 'assets/images/level_1.png'; // 기본 1단계 이미지
 
-                if (myUser.level >= 6) {
+                if (myUser.level >= 3) {
                   petImagePath =
-                      'assets/images/level_3.png'; // 레벨 6 이상: 3단계 최종 진화!
-                } else if (myUser.level >= 3) {
+                      'assets/images/level_3.png'; // 레벨 3 이상: 3단계 최종 진화!
+                } else if (myUser.level >= 2) {
                   petImagePath =
-                      'assets/images/level_2.png'; // 레벨 3 이상: 2단계 진화!
+                      'assets/images/level_2.png'; // 레벨 2 이상: 2단계 진화!
                 }
 
                 // 🚀 [반응형 크기 적용!]
