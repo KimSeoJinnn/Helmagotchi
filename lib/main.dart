@@ -346,6 +346,9 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
   late AnimationController _pipController;
   late Animation<double> _pipAnimation;
 
+  // 🚀 [여기 추가!] 뼈대 보여주기 스위치 (기본값은 켜짐!)
+  bool _showSkeleton = true;
+
   @override
   void initState() {
     super.initState();
@@ -483,7 +486,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
                             CameraPreview(_controller!),
                             
                             // 🥇 [레벨 3] 실시간 AR 뼈대 오버레이 (카메라 크기에 맞춰서 그려짐)
-                            if (_currentPose != null && _imageSize != null)
+                            if (_showSkeleton && _currentPose != null && _imageSize != null)
                               CustomPaint(
                                 painter: PosePainter(
                                   _currentPose!, 
@@ -521,6 +524,38 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
                         ),
                       ),
                     ],
+                  ),
+                ),
+              ),
+
+            // 🕶️ [추가] AR 뼈대 (엑스레이 모드) 토글 버튼
+            if (!isPreparing)
+              Positioned(
+                top: 290, // PT 쌤 박스 아래에 위치
+                right: 30, // 살짝 가운데로 정렬
+                child: GestureDetector(
+                  onTap: () {
+                    // 🚀 버튼을 누르면 스위치가 켜졌다 꺼졌다 합니다!
+                    setState(() {
+                      _showSkeleton = !_showSkeleton;
+                    });
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      // 켜져 있으면 초록색, 꺼져 있으면 칙칙한 회색
+                      color: _showSkeleton ? Colors.greenAccent : Colors.grey[800],
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24, width: 2),
+                      boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 4)],
+                    ),
+                    child: Icon(
+                      // 켜져 있으면 눈 뜬 모양, 꺼져 있으면 눈 감은 모양 아이콘
+                      _showSkeleton ? Icons.visibility : Icons.visibility_off,
+                      color: _showSkeleton ? Colors.black : Colors.white54,
+                      size: 28,
+                    ),
                   ),
                 ),
               ),
