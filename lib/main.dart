@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart'; 
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart'; 
 import 'ai/pose_analyzer.dart'; 
+import 'package:google_fonts/google_fonts.dart';
 
 // 🤝 팀원들이 만든 파일들 불러오기
 import 'core/workout_data.dart';
@@ -35,7 +36,11 @@ class HelmagotchiApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: '헬마고치',
-      theme: ThemeData(primarySwatch: Colors.green),
+      theme: ThemeData(
+        primarySwatch: Colors.orange, // 메인 색상도 따뜻하게 변경
+        // 🚀 [마법의 코드] 앱 전체 폰트를 '배달의민족 주아체' 느낌으로 한 방에 변경!
+        textTheme: GoogleFonts.juaTextTheme(Theme.of(context).textTheme),
+      ),
       home: const MainHomeScreen(),
     );
   }
@@ -58,6 +63,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
   final TitleService _titleService = TitleService(); 
 
   int myTotalSquats = 0;
+  int myBestSquats = 0; 
   String? _selectedTitle;
 
   late AnimationController _idleController;
@@ -115,10 +121,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
             child: const Text('닫기', style: TextStyle(color: Colors.grey, fontSize: 16)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.greenAccent,
-              foregroundColor: Colors.black,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent, foregroundColor: Colors.black),
             onPressed: () {
               setState(() { _selectedTitle = newTitle.name; });
               Navigator.pop(context);
@@ -143,10 +146,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
         return StatefulBuilder( 
           builder: (context, setSheetState) {
             return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).padding.bottom,
-                top: 30, left: 20, right: 20,
-              ),
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom, top: 30, left: 20, right: 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -200,6 +200,43 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     );
   }
 
+  void _startWorkout(bool isRecordMode) async {
+    final result = await Navigator.push(
+      context, 
+      MaterialPageRoute(
+        builder: (context) => CameraWorkoutScreen(
+          isRecordMode: isRecordMode,
+          currentBestRecord: myBestSquats, 
+        ), 
+      )
+    );
+
+    if (result != null) {
+      int completedReps = result['reps'] ?? 0;
+      if (completedReps > 0) {
+        int titlesCountBeforeWorkout = _titleService.getUnlockedTitles(myUser).length;
+
+        setState(() {
+          myTotalSquats += completedReps;
+          myUser.totalSquatCount += completedReps; 
+          
+          // 👇 🚀 [수정] 측정 모드일 때만 최고 기록 업데이트를 수행합니다!
+          if (isRecordMode && completedReps > myBestSquats) {
+            myBestSquats = completedReps;
+          }
+
+          myUser = _expService.addExpByWorkout(myUser, WorkoutType.squat, completedReps);
+          WorkoutService().handleMovement(WorkoutEvent(type: WorkoutType.squat, timestamp: DateTime.now()));
+        });
+
+        final titlesAfterWorkout = _titleService.getUnlockedTitles(myUser);
+        if (titlesAfterWorkout.length > titlesCountBeforeWorkout) {
+          Future.delayed(const Duration(milliseconds: 500), () => _showNewTitlePopup(titlesAfterWorkout.last));
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     int requiredExp = myUser.level * 100;
@@ -209,120 +246,161 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     String displayTitle = _selectedTitle ?? _titleService.getLatestUnlockedTitle(myUser)?.name ?? "헬린이";
 
     return Scaffold(
-      backgroundColor: Colors.grey[900],
-      body: SafeArea(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            GestureDetector(
-              onTap: _showTitleListSheet,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Lv.${myUser.level} $displayTitle', style: const TextStyle(fontSize: 28, color: Colors.white, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 10),
-                    const Icon(Icons.edit, color: Colors.greenAccent, size: 20), 
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 50),
-              child: Container(
-                height: 25,
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
-                child: Stack(
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 500), curve: Curves.easeInOut,
-                      width: (MediaQuery.of(context).size.width - 100) * expRatio,
-                      decoration: BoxDecoration(color: Colors.greenAccent, borderRadius: BorderRadius.circular(15)),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 12),
-                        child: Text('${myUser.currentExp} / $requiredExp XP', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, shadows: [Shadow(color: Colors.black54, blurRadius: 2)])),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            Text('누적 스쿼트: $myTotalSquats회', style: const TextStyle(fontSize: 18, color: Colors.greenAccent)),
-            const SizedBox(height: 20),
-
-            Builder(
-              builder: (context) {
-                String petImagePath = 'assets/images/level_1.png'; 
-                if (myUser.level >= 3) petImagePath = 'assets/images/level_3.png'; 
-                else if (myUser.level >= 2) petImagePath = 'assets/images/level_2.png'; 
-
-                return AnimatedBuilder(
-                  animation: _idleAnimation,
-                  builder: (context, child) => Transform.translate(offset: Offset(0, _idleAnimation.value), child: child),
-                  child: SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.8, height: MediaQuery.of(context).size.width * 0.8,
-                    child: Image.asset(petImagePath, fit: BoxFit.contain),
+      body: Container(
+        // 🌈 3단계에서 적용했던 파스텔 배경!
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFFFF9C4), Color(0xFFFFCC80)], 
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // 🏷️ 1. 레벨 및 호칭 뱃지 (하얗고 둥글게!)
+              GestureDetector(
+                onTap: _showTitleListSheet,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white, // 배경을 완전 흰색으로!
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 3))], // 은은한 그림자
+                    border: Border.all(color: Colors.orangeAccent.withOpacity(0.5), width: 2),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.greenAccent, foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 20),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Lv.${myUser.level} $displayTitle', style: const TextStyle(fontSize: 26, color: Colors.brown, fontWeight: FontWeight.bold)), // 글씨를 진한 갈색으로!
+                      const SizedBox(width: 10),
+                      const Icon(Icons.edit, color: Colors.orangeAccent, size: 22), 
+                    ],
+                  ),
+                ),
               ),
-              onPressed: () async {
-                final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const CameraWorkoutScreen()));
+              const SizedBox(height: 15),
 
-                if (result != null) {
-                  int completedReps = result['reps'] ?? 0;
-                  if (completedReps > 0) {
-                    int titlesCountBeforeWorkout = _titleService.getUnlockedTitles(myUser).length;
+              // 🔋 2. 경험치 바 (게이지가 뚜렷하게 보이게!)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 50),
+                child: Container(
+                  height: 28, // 두께를 살짝 키움
+                  decoration: BoxDecoration(
+                    color: Colors.white, // 빈 게이지바 배경을 흰색으로!
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                  ),
+                  child: Stack(
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 500), curve: Curves.easeInOut,
+                        width: (MediaQuery.of(context).size.width - 100) * expRatio,
+                        decoration: BoxDecoration(
+                          color: Colors.lightGreen, // 게이지 색상을 산뜻한 연두색으로!
+                          borderRadius: BorderRadius.circular(15)
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 15),
+                          child: Text(
+                            '${myUser.currentExp} / $requiredExp XP', 
+                            // 그림자 빼고 글씨를 진한 색으로!
+                            style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 14)
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 25),
 
-                    setState(() {
-                      myTotalSquats += completedReps;
-                      myUser.totalSquatCount += completedReps; 
-                      myUser = _expService.addExpByWorkout(myUser, WorkoutType.squat, completedReps);
-                      WorkoutService().handleMovement(WorkoutEvent(type: WorkoutType.squat, timestamp: DateTime.now()));
-                    });
+              // 📊 3. 누적 & 최고 기록 텍스트 (색상 변경)
+              Text('누적 스쿼트: $myTotalSquats회', style: const TextStyle(fontSize: 16, color: Colors.brown, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 5), 
+              Text('🏆 최고 기록: $myBestSquats회', style: const TextStyle(fontSize: 22, color: Colors.deepOrange, fontWeight: FontWeight.bold)), // 색상 강조!
+              const SizedBox(height: 20),
 
-                    final titlesAfterWorkout = _titleService.getUnlockedTitles(myUser);
-                    if (titlesAfterWorkout.length > titlesCountBeforeWorkout) {
-                      Future.delayed(const Duration(milliseconds: 500), () => _showNewTitlePopup(titlesAfterWorkout.last));
-                    }
-                  }
-                }
-              },
-              child: const Text('운동 시작하기', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            ),
-          ],
+              // 🐥 펫 이미지
+              Builder(
+                builder: (context) {
+                  String petImagePath = 'assets/images/level_1.png'; 
+                  if (myUser.level >= 3) petImagePath = 'assets/images/level_3.png'; 
+                  else if (myUser.level >= 2) petImagePath = 'assets/images/level_2.png'; 
+
+                  return AnimatedBuilder(
+                    animation: _idleAnimation,
+                    builder: (context, child) => Transform.translate(offset: Offset(0, _idleAnimation.value), child: child),
+                    child: SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.75, height: MediaQuery.of(context).size.width * 0.75,
+                      child: Image.asset(petImagePath, fit: BoxFit.contain),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 30),
+
+              // 🍮 4. 일반 연습 버튼 (젤리 버튼 스타일)
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [BoxShadow(color: Colors.grey.shade400, offset: const Offset(0, 5))],
+                ),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white, foregroundColor: Colors.black87,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                  onPressed: () => _startWorkout(false), 
+                  child: const Text('일반 연습하기', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              
+              const SizedBox(height: 20),
+
+              // 🍮 5. 최고 기록 측정 버튼 (젤리 버튼 스타일)
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [BoxShadow(color: Colors.orange.shade800, offset: const Offset(0, 5))], // 진한 그림자
+                ),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orangeAccent, foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 20),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                  onPressed: () => _startWorkout(true), 
+                  child: const Text('🔥 최고 기록 측정하기', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
 // ==========================================
 // 📸 2. 카메라 운동 화면 (AI 로직 연동) + 오버레이
 // ==========================================
 class CameraWorkoutScreen extends StatefulWidget {
-  const CameraWorkoutScreen({super.key}); 
+  final bool isRecordMode; 
+  final int currentBestRecord; 
+
+  const CameraWorkoutScreen({
+    super.key, 
+    required this.isRecordMode,
+    required this.currentBestRecord, 
+  }); 
+
   @override
   State<CameraWorkoutScreen> createState() => _CameraWorkoutScreenState();
 }
@@ -338,22 +416,22 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
   bool isPreparing = true; 
   int prepTimeLeft = 3;
 
-  // 🚀 [추가] AI가 인식한 실시간 뼈대 데이터 보관용
   Pose? _currentPose;
   Size? _imageSize;
 
-  // 🚀 [추가] 레벨 2 (PIP 미니 쌤) 애니메이션용
   late AnimationController _pipController;
   late Animation<double> _pipAnimation;
 
-  // 🚀 [여기 추가!] 뼈대 보여주기 스위치 (기본값은 켜짐!)
   bool _showSkeleton = true;
+
+  Timer? _timeoutTimer;
+  int _lastRepCount = 0;
+  int _timeoutSecondsLeft = 3; 
 
   @override
   void initState() {
     super.initState();
     
-    // 미니 쌤이 스쿼트 하듯 위아래로 움직이는 애니메이션
     _pipController = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat(reverse: true);
     _pipAnimation = Tween<double>(begin: -5, end: 15).animate(CurvedAnimation(parent: _pipController, curve: Curves.easeInOut));
 
@@ -389,11 +467,16 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
 
               if (mounted) {
                 setState(() {
-                  _currentPose = pose; // 뼈대 데이터 저장!
-                  _imageSize = imageSize; // 이미지 크기 저장!
+                  _currentPose = pose; 
+                  _imageSize = imageSize; 
                   
                   if (!isPreparing && poseResult != null) {
                     _repCounter.update(poseResult); 
+                    
+                    if (widget.isRecordMode && _repCounter.reps > _lastRepCount) {
+                      _lastRepCount = _repCounter.reps;
+                      _resetTimeoutTimer();
+                    }
                   }
                 });
               }
@@ -408,11 +491,36 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
     }
   }
 
+  void _resetTimeoutTimer() {
+    if (!widget.isRecordMode) return; 
+
+    _timeoutTimer?.cancel(); 
+    setState(() {
+      _timeoutSecondsLeft = 3; 
+    });
+    
+    _timeoutTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || isPreparing) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        if (_timeoutSecondsLeft > 1) {
+          _timeoutSecondsLeft--; 
+        } else {
+          timer.cancel(); 
+          _showWorkoutCompleteDialog(isAutoEnd: true); 
+        }
+      });
+    });
+  }
+
   @override
   void dispose() {
     _controller?.dispose();
     _poseDetector.close(); 
     _pipController.dispose();
+    _timeoutTimer?.cancel();
     super.dispose();
   }
 
@@ -420,22 +528,42 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
     Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) { timer.cancel(); return; }
       setState(() {
-        if (prepTimeLeft > 1) { prepTimeLeft--; } 
-        else { isPreparing = false; timer.cancel(); }
+        if (prepTimeLeft > 1) { 
+          prepTimeLeft--; 
+        } else { 
+          isPreparing = false; 
+          timer.cancel(); 
+          
+          if (widget.isRecordMode) {
+            _resetTimeoutTimer(); 
+          }
+        }
       });
     });
   }
 
-  void _showWorkoutCompleteDialog() {
+  void _showWorkoutCompleteDialog({bool isAutoEnd = false}) {
+    _timeoutTimer?.cancel(); 
+
     if (_repCounter.reps == 0) {
       showDialog(
         context: context, barrierDismissible: false,
         builder: (context) => AlertDialog(
           backgroundColor: Colors.grey[800],
           title: const Text('👀 앗!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          content: const Text('아직 스쿼트를 1개도 하지 않았습니다.\n이대로 운동을 종료할까요?', style: TextStyle(color: Colors.white70, fontSize: 16)),
+          content: Text(
+            isAutoEnd ? '3초 동안 움직임이 없어 종료되었습니다.\n아직 1개도 하지 않았네요!' : '아직 스쿼트를 1개도 하지 않았습니다.\n이대로 운동을 종료할까요?', 
+            style: const TextStyle(color: Colors.white70, fontSize: 16)
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('계속하기', style: TextStyle(color: Colors.grey, fontSize: 16))),
+            if (!isAutoEnd) 
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  if (widget.isRecordMode) _resetTimeoutTimer(); 
+                }, 
+                child: const Text('계속하기', style: TextStyle(color: Colors.grey, fontSize: 16))
+              ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
               onPressed: () { Navigator.pop(context); Navigator.pop(context, {'reps': 0}); },
@@ -449,17 +577,41 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
 
     int earnedExp = _repCounter.reps * ExpService.squatExp;
 
+    // 👇 🚀 [수정] "측정 모드"일 때만 신기록 달성 여부를 확인합니다!
+    bool isNewRecord = widget.isRecordMode && (_repCounter.reps > widget.currentBestRecord);
+
+    // 팝업 타이틀 결정 (측정 모드에서 신기록일 때만 금빛 타이틀)
+    String dialogTitle = isNewRecord ? '🏆 신기록 달성!' : (isAutoEnd ? '⏱️ 한계 도달!' : '🎉 오운완!');
+    Color titleColor = isNewRecord ? Colors.amber : Colors.white;
+
     showDialog(
       context: context, barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[800],
-        title: const Text('🎉 오운완!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Text('스쿼트 ${_repCounter.reps}회 완료!\n$earnedExp 경험치 획득!', style: const TextStyle(color: Colors.white70, fontSize: 18)),
+        title: Text(dialogTitle, style: TextStyle(color: titleColor, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isNewRecord)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 10),
+                child: Text('축하합니다! 기존의 한계를 넘어섰습니다!', style: TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            
+            if (isAutoEnd && !isNewRecord)
+              const Text('3초 이상 움직임이 없어 측정 종료!', style: TextStyle(color: Colors.redAccent, fontSize: 14)),
+            
+            const SizedBox(height: 5),
+            Text('🔥 이번 기록: ${_repCounter.reps}회', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            Text('경험치 획득: $earnedExp XP', style: const TextStyle(color: Colors.greenAccent, fontSize: 16)),
+          ],
+        ),
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent, foregroundColor: Colors.black),
             onPressed: () { Navigator.pop(context); Navigator.pop(context, {'reps': _repCounter.reps}); },
-            child: const Text('확인'),
+            child: const Text('기록 저장하고 나가기'),
           ),
         ],
       ),
@@ -473,7 +625,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
       body: SafeArea(
         child: Stack(
           children: [
-            // 📸 0층: 카메라 화면 (비율 완벽 수정됨)
+            // 📸 카메라 & 뼈대
             _isCameraInitialized && _controller != null
                 ? Container(
                     width: double.infinity, height: double.infinity, color: Colors.black,
@@ -484,15 +636,9 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
                           fit: StackFit.expand,
                           children: [
                             CameraPreview(_controller!),
-                            
-                            // 🥇 [레벨 3] 실시간 AR 뼈대 오버레이 (카메라 크기에 맞춰서 그려짐)
                             if (_showSkeleton && _currentPose != null && _imageSize != null)
                               CustomPaint(
-                                painter: PosePainter(
-                                  _currentPose!, 
-                                  _imageSize!, 
-                                  _repCounter.lastJudgement.isGoodForm // 자세가 좋으면 초록색으로 변함!
-                                ),
+                                painter: PosePainter(_currentPose!, _imageSize!, _repCounter.lastJudgement.isGoodForm),
                               ),
                           ],
                         ),
@@ -501,78 +647,71 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
                   )
                 : const Center(child: Text("카메라 대기 중", style: TextStyle(color: Colors.white))),
 
-            // 🥈 [레벨 2] 우측 상단 미니 PT 쌤 (PIP)
+            // 시한폭탄 UI (측정 모드일 때만 표시)
+            if (widget.isRecordMode && !isPreparing)
+              Positioned(
+                top: 30, left: 0, right: 0,
+                child: Center(
+                  child: Text(
+                    '🔥 남은 시간: $_timeoutSecondsLeft초',
+                    style: const TextStyle(
+                      fontSize: 30, color: Colors.redAccent, fontWeight: FontWeight.bold,
+                      shadows: [Shadow(color: Colors.black, blurRadius: 10)],
+                    ),
+                  ),
+                ),
+              ),
+
+            // 🥈 PT 쌤 (PIP)
             if (!isPreparing)
               Positioned(
                 top: 130, right: 20,
                 child: Container(
                   width: 80, height: 100,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.greenAccent, width: 2),
-                  ),
+                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.greenAccent, width: 2)),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Text('PT 쌤', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                       AnimatedBuilder(
                         animation: _pipAnimation,
-                        builder: (context, child) => Transform.translate(
-                          offset: Offset(0, _pipAnimation.value),
-                          child: const Icon(Icons.accessibility_new, color: Colors.greenAccent, size: 40),
-                        ),
+                        builder: (context, child) => Transform.translate(offset: Offset(0, _pipAnimation.value), child: const Icon(Icons.accessibility_new, color: Colors.greenAccent, size: 40)),
                       ),
                     ],
                   ),
                 ),
               ),
 
-            // 🕶️ [추가] AR 뼈대 (엑스레이 모드) 토글 버튼
+            // 🕶️ AR 뼈대 토글 버튼
             if (!isPreparing)
               Positioned(
-                top: 290, // PT 쌤 박스 아래에 위치
-                right: 30, // 살짝 가운데로 정렬
+                top: 290, right: 30,
                 child: GestureDetector(
-                  onTap: () {
-                    // 🚀 버튼을 누르면 스위치가 켜졌다 꺼졌다 합니다!
-                    setState(() {
-                      _showSkeleton = !_showSkeleton;
-                    });
-                  },
+                  onTap: () => setState(() => _showSkeleton = !_showSkeleton),
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    padding: const EdgeInsets.all(12),
+                    duration: const Duration(milliseconds: 300), padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      // 켜져 있으면 초록색, 꺼져 있으면 칙칙한 회색
-                      color: _showSkeleton ? Colors.greenAccent : Colors.grey[800],
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white24, width: 2),
-                      boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 4)],
+                      color: _showSkeleton ? Colors.greenAccent : Colors.grey[800], shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24, width: 2), boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 4)],
                     ),
-                    child: Icon(
-                      // 켜져 있으면 눈 뜬 모양, 꺼져 있으면 눈 감은 모양 아이콘
-                      _showSkeleton ? Icons.visibility : Icons.visibility_off,
-                      color: _showSkeleton ? Colors.black : Colors.white54,
-                      size: 28,
-                    ),
+                    child: Icon(_showSkeleton ? Icons.visibility : Icons.visibility_off, color: _showSkeleton ? Colors.black : Colors.white54, size: 28),
                   ),
                 ),
               ),
 
-            // 🥉 [레벨 1] 준비 중일 때 가운데 뜨는 반투명 가이드 실루엣
+            // 🥉 준비 가이드 실루엣
             if (isPreparing)
               Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('여기에 서세요!', style: TextStyle(fontSize: 30, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                    Text(widget.isRecordMode ? '최고 기록 측정 준비!' : '여기에 서세요!', style: const TextStyle(fontSize: 30, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
                     Icon(Icons.accessibility_new, size: 300, color: Colors.white.withOpacity(0.4)),
                   ],
                 ),
               ),
 
-            // 상단 UI (운동 종료 버튼)
+            // 상단 종료 버튼 영역
             Positioned(
               top: 80, left: 20, right: 20,
               child: Row(
@@ -580,11 +719,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
                 children: [
                   Text(
                     _repCounter.lastJudgement.isGoodForm ? '자세 완벽해요!' : _repCounter.lastJudgement.feedback ?? '자세 주의',
-                    style: TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold,
-                      color: _repCounter.lastJudgement.isGoodForm ? Colors.greenAccent : Colors.redAccent,
-                      shadows: const [Shadow(color: Colors.black, blurRadius: 5)],
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _repCounter.lastJudgement.isGoodForm ? Colors.greenAccent : Colors.redAccent, shadows: const [Shadow(color: Colors.black, blurRadius: 5)]),
                   ),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
@@ -595,7 +730,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
               ),
             ),
 
-            // 하단 UI (스쿼트 횟수)
+            // 하단 횟수 표시
             Positioned(
               bottom: 100, left: 0, right: 0,
               child: Center(
@@ -607,9 +742,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
             if (isPreparing)
               Container(
                 color: Colors.black.withOpacity(0.5), width: double.infinity, height: double.infinity,
-                child: Center(
-                  child: Text('$prepTimeLeft', style: const TextStyle(fontSize: 150, fontWeight: FontWeight.bold, color: Colors.white)),
-                ),
+                child: Center(child: Text('$prepTimeLeft', style: const TextStyle(fontSize: 150, fontWeight: FontWeight.bold, color: Colors.white))),
               ),
           ],
         ),
@@ -619,7 +752,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
 }
 
 // ==========================================
-// 🎨 [레벨 3] AR 뼈대 그리는 붓잡이 클래스! (비율 완벽 수정됨)
+// 🎨 AR 뼈대 클래스
 // ==========================================
 class PosePainter extends CustomPainter {
   final Pose pose;
@@ -630,36 +763,23 @@ class PosePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 6.0 
-      ..color = isGoodForm ? Colors.greenAccent : Colors.orangeAccent; 
+    final paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 6.0..color = isGoodForm ? Colors.greenAccent : Colors.orangeAccent; 
 
-    // 🚀 [핵심 해결책] 안드로이드 센서의 가로/세로 뒤집힘 문제 강제 보정!
-    // 무조건 세로가 더 긴 '스마트폰 화면 비율'로 맞춰줍니다.
     final double absoluteImageWidth = imageSize.width > imageSize.height ? imageSize.height : imageSize.width;
     final double absoluteImageHeight = imageSize.width > imageSize.height ? imageSize.width : imageSize.height;
 
-    // 🚀 완벽한 좌표 변환 함수
     Offset translatePoint(double x, double y) {
-      return Offset(
-        // 전면 카메라 거울 모드 (좌우 반전) + 완벽한 가로 비율 보정
-        size.width - (x * size.width / absoluteImageWidth),
-        // 완벽한 세로 비율 보정
-        y * size.height / absoluteImageHeight,
-      );
+      return Offset(size.width - (x * size.width / absoluteImageWidth), y * size.height / absoluteImageHeight);
     }
 
     void drawLine(PoseLandmarkType type1, PoseLandmarkType type2) {
       final p1 = pose.landmarks[type1];
       final p2 = pose.landmarks[type2];
       if (p1 != null && p2 != null && p1.likelihood > 0.5 && p2.likelihood > 0.5) {
-        // 기존 translateX 대신 새로 만든 translatePoint 함수를 사용합니다.
         canvas.drawLine(translatePoint(p1.x, p1.y), translatePoint(p2.x, p2.y), paint);
       }
     }
 
-    // 어깨, 골반, 무릎, 발목 선 긋기
     drawLine(PoseLandmarkType.leftShoulder, PoseLandmarkType.rightShoulder);
     drawLine(PoseLandmarkType.leftShoulder, PoseLandmarkType.leftHip);
     drawLine(PoseLandmarkType.rightShoulder, PoseLandmarkType.rightHip);
@@ -671,7 +791,5 @@ class PosePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant PosePainter oldDelegate) {
-    return true; 
-  }
+  bool shouldRepaint(covariant PosePainter oldDelegate) => true; 
 }
