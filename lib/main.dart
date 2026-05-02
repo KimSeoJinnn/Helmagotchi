@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async'; // 👈 이거 꼭 추가해주세요!
+
 // 🚀 이 한 줄이 핵심! 방금 완벽하게 고친 home_screen.dart를 불러옵니다!
 import 'screens/home_screen.dart';
 
