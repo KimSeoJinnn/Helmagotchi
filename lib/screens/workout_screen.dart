@@ -22,6 +22,9 @@ import '../ai/pose_analyzer.dart';
 import '../ai/rep_counter.dart';
 import '../data/exp_service.dart';
 
+// 💡 방금 만든 마법의 창고 파일을 불러옵니다!
+import '../data/local_storage.dart';
+
 class CameraWorkoutScreen extends StatefulWidget {
   final bool isRecordMode;
   final int currentBestRecord;
@@ -62,9 +65,12 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
   String? _videoPath; // 녹화된 파일의 진짜 경로 저장
   bool _isRecordingArmed = false; // 👈 💡 추가: 준비 시간에 눌러둔 '녹화 예약' 상태
 
+  String _equippedAccessory = 'none'; // 기본값은 아무것도 안 낀 상태
+
   @override
   void initState() {
     super.initState();
+    _loadAccessory(); // 💡 화면 켜질 때 장착템 불러오기!
 
     // 💡 [핵심] 화면에 들어오자마자 상단 배터리/시간, 하단 버튼을 싹 숨깁니다! (몰입 모드)
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -83,6 +89,13 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
         _startAIStream(); 
       });
     }
+  }
+
+  Future<void> _loadAccessory() async {
+    String loaded = await LocalStorage.loadEquippedAccessory();
+    setState(() {
+      _equippedAccessory = loaded;
+    });
   }
 
   @override
@@ -481,11 +494,51 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
                 ),
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 150),
-                  child: Image.asset(
-                    _isSquattingDown ? 'assets/images/pet_squat_down.png' : 'assets/images/pet_squat_up.png',  
-                    key: ValueKey(_isSquattingDown),
-                    width: 100, 
-                    filterQuality: FilterQuality.none, 
+                  child: Stack(
+                    key: ValueKey('$_equippedAccessory${_isSquattingDown}'),
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.none, // 왕관이 위로 튀어나와도 잘리지 않게 방어!
+                    children: [
+                      // 🧸 1층 (Layer 1): 헬마고치 몸통
+                      Image.asset(
+                        _isSquattingDown ? 'assets/images/basic_squat.png' : 'assets/images/basic_idle1.png',
+                        width: 100, 
+                        filterQuality: FilterQuality.none, 
+                      ),
+                      
+                      // 👑 2층 (Layer 2): 악세사리 (이름에 따라 위치 자동 조절!)
+                      if (_equippedAccessory != 'none')
+                        Builder(
+                          builder: (context) {
+                            // 📍 여기서 아이템별로 위치와 크기를 한 번에 관리합니다!
+                            double topPos = 0;
+                            double rightPos = 0;
+                            double itemWidth = 20; // 기본 크기
+
+                            if (_equippedAccessory == 'crown') {
+                              // 👑 왕관일 때의 위치 (오른쪽 위 대각선)
+                              topPos = _isSquattingDown ? 15 : -5; // 앉으면 10, 서있으면 -10
+                              rightPos = 33;  // 오른쪽으로 살짝 이동
+                            } else if (_equippedAccessory == 'wing') {
+                              // 날개일 때의 위치 (예시)
+                              topPos = _isSquattingDown ? 20 : 5;
+                              rightPos = -5;
+                              itemWidth = 35;
+                            }
+                            // 나중에 새로운 템(안경 등)이 생기면 여기에 else if만 추가하면 끝!
+
+                            return Positioned(
+                              top: topPos,
+                              right: rightPos,
+                              child: Image.asset(
+                                'assets/images/$_equippedAccessory.png',
+                                width: itemWidth,
+                                filterQuality: FilterQuality.none,
+                              ),
+                            );
+                          },
+                        ),
+                    ],
                   ),
                 ),
               ),

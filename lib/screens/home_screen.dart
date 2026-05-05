@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async'; 
-import 'dart:convert'; // 📅 캘린더 저장을 위한 json 변환기
+import 'dart:convert';
 
-// 리더님 프로젝트 경로에 맞게 설정된 import
 import '../core/workout_data.dart';
 import '../data/user_model.dart';
 import '../data/exp_service.dart';
 import '../data/workout_service.dart';
 import '../data/title_service.dart';
+import '../data/local_storage.dart'; // 💡 로컬 스토리지 import!
 import 'workout_screen.dart'; 
-import 'calendar_screen.dart'; // 📅 캘린더 화면
+import 'calendar_screen.dart'; 
 
 class MainHomeScreen extends StatefulWidget {
   const MainHomeScreen({super.key});
@@ -28,8 +28,11 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   int myTotalSquats = 0;
   int myBestSquats = 0;
   String? _selectedTitle;
-
   int _selectedEffect = 0; 
+
+  // 🎒 악세사리 옷장용 변수
+  String _equippedAccessory = 'none'; 
+  List<String> _unlockedAccessories = ['none'];
 
   bool _isFrameOne = true; 
   Timer? _animationTimer;  
@@ -53,6 +56,11 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // 💡 악세사리 데이터 불러오기
+    String loadedAcc = await LocalStorage.loadEquippedAccessory();
+    List<String> unlockedAcc = await LocalStorage.loadUnlockedAccessories();
+
     setState(() {
       myTotalSquats = prefs.getInt('total_squats') ?? 0;
       myBestSquats = prefs.getInt('best_squats') ?? 0;
@@ -60,6 +68,9 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       myUser.currentExp = prefs.getInt('user_exp') ?? 0;
       _selectedTitle = prefs.getString('user_title');
       _selectedEffect = prefs.getInt('user_title_effect') ?? 0; 
+      
+      _equippedAccessory = loadedAcc;
+      _unlockedAccessories = unlockedAcc;
     });
   }
 
@@ -84,7 +95,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     }
   }
 
-  // 📅 [핵심] 일일 통계 저장 (설계도 수정 완료!)
   Future<void> _saveDailyStats(int reps, bool isRecordMode) async {
     final prefs = await SharedPreferences.getInstance();
     final String dateKey = "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}";
@@ -94,10 +104,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 
     Map<String, dynamic> todayData = dailyStats[dateKey] ?? {'reps': 0, 'max': 0};
     
-    // 1. 일일 운동량은 모드 상관없이 누적
     todayData['reps'] = (todayData['reps'] as int) + reps;
     
-    // 2. 최고 기록 측정 모드일 때만 일일 최고 기록을 갱신!
     if (isRecordMode && reps > (todayData['max'] as int)) {
       todayData['max'] = reps;
     }
@@ -132,8 +140,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 
     setState(() {
       myTotalSquats += completedReps;
-      
-      // 👇 방금 만든 _saveDailyStats 호출! (에러 없어짐)
       _saveDailyStats(completedReps, isRecordMode); 
 
       if (isRecordMode && completedReps > myBestSquats) {
@@ -175,15 +181,9 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           children: [
             const Icon(Icons.workspace_premium, color: Colors.amber, size: 80),
             const SizedBox(height: 15),
-            Text(
-              newTitle.name,
-              style: const TextStyle(color: Colors.greenAccent, fontSize: 28, fontWeight: FontWeight.bold)
-            ),
+            Text(newTitle.name, style: const TextStyle(color: Colors.greenAccent, fontSize: 28, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            Text(
-              newTitle.description,
-              style: const TextStyle(color: Colors.white70, fontSize: 16)
-            ),
+            Text(newTitle.description, style: const TextStyle(color: Colors.white70, fontSize: 16)),
           ]
         ),
         actionsAlignment: MainAxisAlignment.center,
@@ -292,6 +292,78 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
+  // 🎒 칭호 아래에 추가할 옷장 바텀시트!
+  void _showClosetSheet() {
+    final Map<String, String> allItems = {
+      'none': '기본 (장착 해제)',
+      'crown': '황금 왕관',
+    };
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom, top: 30, left: 20, right: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🎒 내 옷장', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 20),
+
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: allItems.keys.length,
+                    itemBuilder: (context, index) {
+                      String itemKey = allItems.keys.elementAt(index);
+                      String itemName = allItems[itemKey]!;
+                      bool isUnlocked = _unlockedAccessories.contains(itemKey);
+                      bool isSelected = _equippedAccessory == itemKey;
+
+                      // 테스트를 위해 모두 해금 상태로 열어둡니다!
+                      isUnlocked = true; 
+
+                      return Card(
+                        color: isUnlocked ? Colors.greenAccent.withOpacity(0.1) : Colors.grey[850],
+                        shape: RoundedRectangleBorder(
+                          side: BorderSide(
+                            color: isSelected ? Colors.greenAccent : (isUnlocked ? Colors.greenAccent.withOpacity(0.3) : Colors.transparent),
+                            width: isSelected ? 2 : 1,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ListTile(
+                          onTap: isUnlocked ? () async {
+                            setState(() { _equippedAccessory = itemKey; });
+                            await LocalStorage.saveEquippedAccessory(itemKey);
+                            Navigator.pop(context);
+                          } : null,
+                          leading: Icon(
+                            isUnlocked ? Icons.checkroom : Icons.lock,
+                            color: isSelected ? Colors.greenAccent : (isUnlocked ? Colors.greenAccent.withOpacity(0.5) : Colors.grey[600]),
+                            size: 30,
+                          ),
+                          title: Text(itemName, style: TextStyle(color: isUnlocked ? Colors.white : Colors.grey[500], fontWeight: FontWeight.bold, fontSize: 18)),
+                          trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.greenAccent) : null,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 30),
+                ],
+              ),
+            );
+          }
+        );
+      },
+    );
+  }
+
   Widget _buildEffectOption(int effectValue, String label, IconData icon, Color color, StateSetter setSheetState) {
     bool isSelected = _selectedEffect == effectValue;
     return GestureDetector(
@@ -384,7 +456,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     String displayTitle = _selectedTitle ?? _titleService.getLatestUnlockedTitle(myUser)?.name ?? "헬린이";
 
     return Scaffold(
-      extendBody: true, // 🔥 [수정 1] 배경이 바닥까지 꽉 차도록 확장!
+      extendBody: true,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -393,12 +465,11 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
         ),
         child: SafeArea(
-          bottom: false, // 🔥 [수정 2] 아이폰 하단 홈 바 영역까지 그라데이션 덮기
+          bottom: false, 
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const SizedBox(height: 40), 
-              // ... (이하 기존의 경험치 바, 캐릭터, 칭호 등 UI 코드 동일하게 유지)
               
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 50),
@@ -470,6 +541,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               ),
               const SizedBox(height: 15),
 
+              // 💡 펫 & 악세사리 Stack 영역 (Builder 걷어내고 교체 완료!)
               GestureDetector(
                 onTap: () {
                   setState(() { _isBubbleVisible = true; });
@@ -480,26 +552,70 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                     }
                   });
                 },
-                child: Builder(
-                  builder: (context) {
-                    String petImagePath = _isFrameOne 
-                        ? 'assets/images/pet_idle_1.png'  
-                        : 'assets/images/pet_idle_2.png'; 
-
-                    return SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.4, 
-                      height: MediaQuery.of(context).size.width * 0.4, 
-                      child: Image.asset(petImagePath, fit: BoxFit.contain, filterQuality: FilterQuality.none)
-                    );
-                  },
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.4, 
+                  height: MediaQuery.of(context).size.width * 0.4, 
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 150),
+                    child: Stack(
+                      key: ValueKey('$_equippedAccessory$_isFrameOne'),
+                      alignment: Alignment.center,
+                      clipBehavior: Clip.none,
+                      children: [
+                        // 🧸 1층 (Layer 1): 헬마고치 몸통
+                        Image.asset(
+                          _isFrameOne ? 'assets/images/basic_idle1.png' : 'assets/images/basic_idle2.png',
+                          width: MediaQuery.of(context).size.width * 0.4,
+                          filterQuality: FilterQuality.none, 
+                        ),
+                        
+                        // 👑 2층 (Layer 2): 악세사리
+                        if (_equippedAccessory != 'none')
+                          Positioned(
+                            top: -14,   // 👈 1. 위아래 위치 조절 (작아질수록 위로 올라감)
+                            right: 50,  // 👈 2. 오른쪽 위치 조절 (새로 추가! 작아질수록 더 오른쪽으로 감)
+                            child: Image.asset(
+                              'assets/images/$_equippedAccessory.png', 
+                              width: 40, // 👈 3. 왕관 크기 줄이기 (기존 80 -> 50)
+                              filterQuality: FilterQuality.none, 
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
               
               const SizedBox(height: 20), 
               
+              // 💡 기존 칭호 뱃지 유지!
               GestureDetector(
                 onTap: _showTitleListSheet,
                 child: _buildEquippedTitleBadge(displayTitle),
+              ),
+
+              const SizedBox(height: 15),
+
+              // 🎒 옷장 열기 버튼 추가!
+              GestureDetector(
+                onTap: _showClosetSheet,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.black87, width: 2), 
+                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.checkroom, color: Colors.black87, size: 20),
+                      SizedBox(width: 8),
+                      Text('옷장 열기', style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
               ),
 
               const Spacer(),
@@ -508,9 +624,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         ),
       ),
       
-      // 🛠️ 배경이 채워진 예쁜 알약 네비게이션 바
       bottomNavigationBar: Padding(
-        // SafeArea 대신 디바이스 하단 여백을 직접 계산해서 더 띄워줍니다.
         padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).padding.bottom + 15),
         child: Container(
           height: 70,
@@ -539,7 +653,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       ),
     );
   }
-  // 💡 하단 네비게이션 버튼을 예쁘게 만들어주는 헬퍼 함수
+
   Widget _buildNavButton(IconData icon, VoidCallback onTap, Color iconColor) {
     return GestureDetector(
       onTap: onTap,
@@ -549,7 +663,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(15),
         ),
-        child: Icon(icon, size: 35, color: iconColor), // 👈 여기서 전달받은 색상을 적용!
+        child: Icon(icon, size: 35, color: iconColor), 
       ),
     );
   }
