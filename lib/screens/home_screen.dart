@@ -11,6 +11,7 @@ import '../data/title_service.dart';
 import '../data/local_storage.dart'; // 💡 로컬 스토리지 import!
 import 'workout_screen.dart'; 
 import 'calendar_screen.dart'; 
+import 'photo_screen.dart';
 
 class MainHomeScreen extends StatefulWidget {
   const MainHomeScreen({super.key});
@@ -27,6 +28,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 
   int myTotalSquats = 0;
   int myBestSquats = 0;
+  int myDailyGoal = 50;
   String? _selectedTitle;
   int _selectedEffect = 0; 
 
@@ -54,6 +56,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     });
   }
 
+  // 👇 기존 _loadSavedData 함수를 지우고 이걸로 덮어써주세요!
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
     
@@ -64,8 +67,13 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     setState(() {
       myTotalSquats = prefs.getInt('total_squats') ?? 0;
       myBestSquats = prefs.getInt('best_squats') ?? 0;
+      myDailyGoal = prefs.getInt('daily_goal') ?? 50;
+
+      // 💡 [핵심 수정] myUser 내부의 스탯도 똑같이 복구해야 칭호 해금 상태가 유지됩니다!
       myUser.level = prefs.getInt('user_level') ?? 1;
       myUser.currentExp = prefs.getInt('user_exp') ?? 0;
+      myUser.totalSquatCount = myTotalSquats; // 👈 칭호를 기억하게 만드는 마법의 한 줄!
+      
       _selectedTitle = prefs.getString('user_title');
       _selectedEffect = prefs.getInt('user_title_effect') ?? 0; 
       
@@ -79,6 +87,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('total_squats', myTotalSquats);
       await prefs.setInt('best_squats', myBestSquats);
+      await prefs.setInt('daily_goal', myDailyGoal);
       await prefs.setInt('user_level', myUser.level); 
       await prefs.setInt('user_exp', myUser.currentExp); 
       await prefs.setInt('user_title_effect', _selectedEffect); 
@@ -292,11 +301,54 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
+  // 🎯 일일 목표 설정 팝업창
+  void _showGoalSettingDialog() {
+    TextEditingController goalController = TextEditingController(text: myDailyGoal.toString());
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('🎯 일일 퀘스트 목표 설정', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: goalController,
+          keyboardType: TextInputType.number, // 숫자 키보드만 나오게!
+          decoration: InputDecoration(
+            labelText: '스쿼트 목표 횟수',
+            suffixText: '회',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+            onPressed: () {
+              setState(() {
+                // 입력한 숫자를 가져오되, 이상한 문자면 기본값 50으로 설정
+                myDailyGoal = int.tryParse(goalController.text) ?? 50; 
+              });
+              _saveCurrentData(); // 💡 바뀐 목표치 로컬에 저장!
+              Navigator.pop(context);
+            },
+            child: const Text('저장', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // 🎒 칭호 아래에 추가할 옷장 바텀시트!
   void _showClosetSheet() {
     final Map<String, String> allItems = {
       'none': '기본 (장착 해제)',
       'crown': '황금 왕관',
+      'wing': '천사 날개',         // ✨ 추가!
+      'ribbon': '귀여운 리본',        // ✨ 추가!
+      'sunglasses': '멋쟁이 선글라스', // ✨ 추가!
     };
 
     showModalBottomSheet(
@@ -471,34 +523,110 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             children: [
               const SizedBox(height: 40), 
               
+              // 🌟 1. 레벨 & 경험치 바 영역
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 50),
-                child: Container(
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: Colors.white, 
-                    borderRadius: BorderRadius.circular(15), 
-                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))]
-                  ),
-                  child: Stack(
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 500), 
-                        curve: Curves.easeInOut, 
-                        width: (MediaQuery.of(context).size.width - 100) * expRatio, 
-                        decoration: BoxDecoration(color: Colors.lightGreen, borderRadius: BorderRadius.circular(15))
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Row(
+                  children: [
+                    // 👑 현재 레벨 표시 (왼쪽)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade700,
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
                       ),
-                      Align(
-                        alignment: Alignment.center, 
-                        child: Text('XP ${myUser.currentExp} / $requiredExp', style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 13))
+                      child: Text(
+                        'Lv.${myUser.level}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    
+                    // 🔋 경험치 바 & 우측 텍스트
+                    Expanded(
+                      child: Stack(
+                        alignment: Alignment.centerRight,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(15),
+                            child: LinearProgressIndicator(
+                              // 👇 핵심 수정: maxExp 대신 (현재 레벨 * 100)을 목표치로 계산합니다!
+                              value: (myUser.currentExp / (myUser.level * 100)).clamp(0.0, 1.0),
+                              minHeight: 26,
+                              backgroundColor: Colors.grey[200],
+                              color: Colors.amber,
+                            ),
+                          ),
+                          // 바 내부 우측 XP 텍스트
+                          Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: Text(
+                              // 👇 여기도 마찬가지로 (현재 레벨 * 100)으로 표시합니다!
+                              '${myUser.currentExp} / ${myUser.level * 100} XP',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // 👇 기존 const Spacer(), 자리에 이 코드를 쏙 넣어주세요!
+              const SizedBox(height: 30), // 위쪽 여백
+
+              // 🎯 일일 퀘스트 카드
+              GestureDetector(
+                onTap: _showGoalSettingDialog, // 👈 누르면 팝업창 뜸!
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 40),
+                  padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.amber, width: 2), // 예쁜 노란색 테두리
+                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4))],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text('일일 목표', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+                          const SizedBox(width: 8),
+                          Icon(Icons.edit, size: 16, color: Colors.grey[500]), // 수정 가능함을 알리는 연필 아이콘
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // 🟢 프로그레스 바 (진행도)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          value: myDailyGoal > 0 ? (myTotalSquats / myDailyGoal).clamp(0.0, 1.0) : 0, // 에러 방지 계산식
+                          minHeight: 12,
+                          backgroundColor: Colors.grey[200],
+                          color: Colors.amber,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // 🔢 숫자 텍스트
+                      Text(
+                        '$myTotalSquats / $myDailyGoal 회', 
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87)
                       ),
                     ],
                   ),
                 ),
               ),
               
-              const Spacer(),
-
+              const SizedBox(height: 50),
+              
               AnimatedOpacity(
                 opacity: _isBubbleVisible ? 1.0 : 0.0, 
                 duration: const Duration(milliseconds: 300), 
@@ -516,9 +644,9 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                       ),
                       child: Column(
                         children: [
-                          Text('오늘 누적 스쿼트는 $myTotalSquats회 했어!!', style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
+                          Text('총 누적 스쿼트 횟수는 $myTotalSquats회야!!', style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 5),
-                          Text('최고기록은 $myBestSquats회 했어!!', style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
+                          Text('역대 최고 기록은 $myBestSquats회야!!', style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -556,7 +684,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   width: MediaQuery.of(context).size.width * 0.4, 
                   height: MediaQuery.of(context).size.width * 0.4, 
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 150),
+                    duration: const Duration(milliseconds: 300),
                     child: Stack(
                       key: ValueKey('$_equippedAccessory$_isFrameOne'),
                       alignment: Alignment.center,
@@ -569,16 +697,47 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                           filterQuality: FilterQuality.none, 
                         ),
                         
-                        // 👑 2층 (Layer 2): 악세사리
+                        // 👑 2층 (Layer 2): 악세사리 (홈 화면 전용 위치 자동 조절!)
                         if (_equippedAccessory != 'none')
-                          Positioned(
-                            top: -14,   // 👈 1. 위아래 위치 조절 (작아질수록 위로 올라감)
-                            right: 50,  // 👈 2. 오른쪽 위치 조절 (새로 추가! 작아질수록 더 오른쪽으로 감)
-                            child: Image.asset(
-                              'assets/images/$_equippedAccessory.png', 
-                              width: 40, // 👈 3. 왕관 크기 줄이기 (기존 80 -> 50)
-                              filterQuality: FilterQuality.none, 
-                            ),
+                          Builder(
+                            builder: (context) {
+                              // 📍 홈 화면에서의 기본 위치와 크기를 세팅합니다.
+                              double topPos = 0;
+                              double rightPos = 0; 
+                              double itemWidth = 40; // 홈 화면은 펫이 더 크니까 기본 크기도 약간 더 큼!
+
+                              if (_equippedAccessory == 'crown') {
+                                // 👑 왕관일 때의 위치 (오른쪽 위 대각선 핏!)
+                                topPos = -14;  // 숫자가 작아질수록 더 높이 올라감
+                                rightPos = 50; // 숫자가 작아질수록 더 오른쪽으로 감
+                                itemWidth = 40; 
+                              } else if (_equippedAccessory == 'wing') {
+                                // 🪽 날개: 몸통 뒤쪽에 넓게 퍼지도록 크게 설정
+                                topPos = 30;
+                                rightPos = 100; 
+                                itemWidth = 80; 
+                              } else if (_equippedAccessory == 'ribbon') {
+                                // 🎀 리본: 머리 한쪽이나 목에 오도록 설정
+                                topPos = -14;
+                                rightPos = 40; 
+                                itemWidth = 60;
+                              } else if (_equippedAccessory == 'sunglasses') {
+                                // 🕶️ 선글라스: 눈 위치에 딱 맞게!
+                                topPos = 0;
+                                rightPos = 20; 
+                                itemWidth = 100;
+                              }
+
+                              return Positioned(
+                                top: topPos,
+                                right: rightPos, // 👈 여기가 핵심! 오른쪽 기준으로 띄웁니다.
+                                child: Image.asset(
+                                  'assets/images/$_equippedAccessory.png', 
+                                  width: itemWidth, 
+                                  filterQuality: FilterQuality.none, 
+                                ),
+                              );
+                            },
                           ),
                       ],
                     ),
@@ -586,7 +745,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 ),
               ),
               
-              const SizedBox(height: 20), 
+              const SizedBox(height: 50), 
               
               // 💡 기존 칭호 뱃지 유지!
               GestureDetector(
@@ -596,34 +755,13 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 
               const SizedBox(height: 15),
 
-              // 🎒 옷장 열기 버튼 추가!
-              GestureDetector(
-                onTap: _showClosetSheet,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.black87, width: 2), 
-                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.checkroom, color: Colors.black87, size: 20),
-                      SizedBox(width: 8),
-                      Text('옷장 열기', style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-              ),
-
               const Spacer(),
             ],
           ),
         ),
       ),
       
+      // 💡 홈 화면 맨 아래 bottomNavigationBar
       bottomNavigationBar: Padding(
         padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).padding.bottom + 15),
         child: Container(
@@ -632,21 +770,25 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(35), 
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15), 
-                blurRadius: 20, 
-                offset: const Offset(0, 5)
-              )
+              BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 20, offset: const Offset(0, 5))
             ],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildNavButton(Icons.fitness_center, () => _startWorkout(false), Colors.blueAccent),
+              _buildNavButton(Icons.fitness_center, () => _startWorkout(false), Colors.blueAccent), // 스쿼트
+              
+              _buildNavButton(Icons.checkroom, _showClosetSheet, Colors.green), // 옷장
               _buildNavButton(Icons.calendar_month, () {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const WorkoutCalendarScreen()));
-              }, Colors.purpleAccent),
-              _buildNavButton(Icons.emoji_events, () => _startWorkout(true), Colors.orangeAccent),
+              }, Colors.purpleAccent), // 캘린더
+              
+              // 📸 새롭게 추가된 AR 카메라 버튼!
+              _buildNavButton(Icons.camera_alt, () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const ARPhotoScreen()));
+              }, Colors.pinkAccent),
+
+              _buildNavButton(Icons.emoji_events, () => _startWorkout(true), Colors.orangeAccent), // 최고 기록
             ],
           ),
         ),

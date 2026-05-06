@@ -86,28 +86,35 @@ class _WorkoutCalendarScreenState extends State<WorkoutCalendarScreen> {
     Color totalCardColor = isBeforeStart ? Colors.grey.shade600 : Colors.blueAccent;
     Color bestCardColor = isBeforeStart ? Colors.grey.shade600 : Colors.amber.shade700;
 
-    return Scaffold(
-      backgroundColor: Colors.grey[50], 
-      appBar: AppBar(
-        title: const Text('운동 일지 및 통계', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
+    // 🌟 여기서부터 변경됩니다! 전체를 그라데이션 컨테이너로 감쌉니다.
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFFFFF9C4), Color(0xFFFFCC80)], // 👈 홈 화면과 동일한 색상!
+        ),
       ),
-      body: SafeArea(
-        // 👇 해결 1: 달력이 길어져도 에러가 나지 않도록 스크롤 기능 추가!
-        child: SingleChildScrollView( 
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Column(
-            children: [
-              // 📅 캘린더 영역
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))],
-                ),
-                child: TableCalendar(
+      child: Scaffold(
+        backgroundColor: Colors.transparent, // 👈 배경을 투명하게 해서 뒤에 깔린 그라데이션이 보이게 합니다.
+        appBar: AppBar(
+          title: const Text('운동 일지 및 통계', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.transparent, // 앱바도 투명하게!
+          elevation: 0,
+          iconTheme: const IconThemeData(color: Colors.black87),
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView( 
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Column(
+              children: [
+                // 📅 캘린더 영역 (이하 코드는 기존과 동일하게 쭉 이어집니다!)
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))],
+                  ),
+                  child: TableCalendar(
                   firstDay: DateTime.utc(2025, 1, 1),
                   lastDay: DateTime.utc(2030, 12, 31),
                   focusedDay: _focusedDay,
@@ -210,7 +217,7 @@ class _WorkoutCalendarScreenState extends State<WorkoutCalendarScreen> {
             ],
           ),
         ),
-      ),
+      ),),
     );
   }
 

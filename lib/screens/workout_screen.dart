@@ -513,17 +513,27 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
                             // 📍 여기서 아이템별로 위치와 크기를 한 번에 관리합니다!
                             double topPos = 0;
                             double rightPos = 0;
-                            double itemWidth = 20; // 기본 크기
+                            double itemWidth = 25; // 기본 크기
 
                             if (_equippedAccessory == 'crown') {
                               // 👑 왕관일 때의 위치 (오른쪽 위 대각선)
-                              topPos = _isSquattingDown ? 15 : -5; // 앉으면 10, 서있으면 -10
-                              rightPos = 33;  // 오른쪽으로 살짝 이동
+                              topPos = _isSquattingDown ? 9 : -5; // 앉으면 10, 서있으면 -10,  작아질수록 위로
+                              rightPos = _isSquattingDown ? 35 : 30;  // 작아질수록 오른쪽으로
                             } else if (_equippedAccessory == 'wing') {
-                              // 날개일 때의 위치 (예시)
-                              topPos = _isSquattingDown ? 20 : 5;
-                              rightPos = -5;
-                              itemWidth = 35;
+                              // 🪽 날개
+                              topPos = 30; 
+                              rightPos = 65;  
+                              itemWidth = 40; 
+                            } else if (_equippedAccessory == 'ribbon') {
+                              // 🎀 리본
+                              topPos = _isSquattingDown ? 12 : -5; 
+                              rightPos = 30;  
+                              itemWidth = 30; 
+                            } else if (_equippedAccessory == 'sunglasses') {
+                              // 🕶️ 선글라스
+                              topPos = _isSquattingDown ? 17 : 2; 
+                              rightPos = 20;
+                              itemWidth = 55;
                             }
                             // 나중에 새로운 템(안경 등)이 생기면 여기에 else if만 추가하면 끝!
 
