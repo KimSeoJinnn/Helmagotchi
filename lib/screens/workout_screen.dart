@@ -4,25 +4,17 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
-
-// 💡 새로 추가된 화면 녹화 & 갤러리 저장 패키지들
 import 'package:flutter_screen_recording/flutter_screen_recording.dart';
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
-
-// 💡 FFmpeg 패키지 추가 
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
- 
-// 💡 상단/하단 바를 숨기기 위해 꼭 필요해요!
 import 'package:flutter/services.dart';
-
+import 'package:share_plus/share_plus.dart';
 import '../main.dart'; 
 import '../ai/pose_analyzer.dart';
 import '../ai/rep_counter.dart';
 import '../data/exp_service.dart';
-
-// 💡 방금 만든 마법의 창고 파일을 불러옵니다!
 import '../data/local_storage.dart';
 
 class CameraWorkoutScreen extends StatefulWidget {
@@ -66,6 +58,10 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
   bool _isRecordingArmed = false; // 👈 💡 추가: 준비 시간에 눌러둔 '녹화 예약' 상태
 
   String _equippedAccessory = 'none'; // 기본값은 아무것도 안 낀 상태
+
+  // 👇 💡 새롭게 추가된 '초시계' 변수들!
+  DateTime? _recordingStartTime; // 녹화 시작 시간
+  int _recordedDurationInSeconds = 1; // 총 녹화된 시간(초)
 
   @override
   void initState() {
@@ -196,23 +192,30 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
     });
   }
 
+  // 🎯 운동 종료 통합 관리 함수 (모든 상황에서 영상 저장 지원)
   void _showWorkoutCompleteDialog({bool isAutoEnd = false}) async {
     _timeoutTimer?.cancel();
 
-    // 💡 화면 녹화 종료 (새로운 패키지 적용!)
+    // 💡 [핵심] 녹화 중이었다면, 종료 버튼이나 타임아웃 시 여기서 먼저 영상을 안전하게 멈추고 시간을 잽니다!
     if (_isRecording) {
       try {
         String path = await FlutterScreenRecording.stopRecordScreen;
         if (path.isNotEmpty) {
-          _videoPath = path; // 진짜 경로 저장!
+          _videoPath = path;
+          // ⏳ 녹화 시간 최종 계산
+          if (_recordingStartTime != null) {
+            _recordedDurationInSeconds = DateTime.now().difference(_recordingStartTime!).inSeconds;
+          }
         }
       } catch (e) {
         print("화면 녹화 자동 종료 에러: $e");
       }
-      setState(() { _isRecording = false; });
+      if (mounted) setState(() { _isRecording = false; });
     }
 
-    // 0회 처리 로직 (기존과 동일)
+    // ---------------------------------------------------------
+    // 🛡️ 1단계: 0회 처리 로직 (운동을 1개도 안 했다면 영상 저장 안 함)
+    // ---------------------------------------------------------
     if (_repCounter.reps == 0) {
       showDialog(
         context: context, 
@@ -244,12 +247,17 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
           ],
         ),
       );
-      return;
+      return; // 0회면 여기서 끝! 밑의 영상 저장 팝업으로 안 넘어감.
     }
 
+    // ---------------------------------------------------------
+    // 🏆 2단계: 성공 팝업 및 영상 저장 제안 (1개 이상 했을 때만 진입)
+    // ---------------------------------------------------------
     int earnedExp = _repCounter.reps * ExpService.squatExp;
     bool isNewRecord = widget.isRecordMode && (_repCounter.reps > widget.currentBestRecord);
     
+    if (!mounted) return;
+
     showDialog(
       context: context, 
       barrierDismissible: false,
@@ -265,96 +273,76 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
             Text('🔥 이번 기록: ${_repCounter.reps}회', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
             Text('경험치 획득: $earnedExp XP', style: const TextStyle(color: Colors.greenAccent, fontSize: 16), textAlign: TextAlign.center),
             
-            // 🎬 갤러리 저장 버튼 영역
+            // 🎬 갤러리 저장 & 공유 버튼 영역
             if (_hasRecorded && _videoPath != null) ...[
               const Divider(color: Colors.white24, height: 30, thickness: 1),
-              const Text('🎬 녹화된 영상을 어떻게 저장할까요?', style: TextStyle(color: Colors.white70, fontSize: 14), textAlign: TextAlign.center),
+              const Text('🎬 운동 완료! 오늘의 땀방울을 공유해볼까요?', style: TextStyle(color: Colors.white70, fontSize: 14), textAlign: TextAlign.center),
               const SizedBox(height: 15),
               
-              // ⚡ 1. 타임랩스(4배속) 저장 버튼
+              // 🚀 15초 타임랩스 인스타/SNS 공유 버튼
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.purpleAccent, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
                 onPressed: () async {
-                  // 로딩 빙글빙글 띄우기
-                  showDialog(
-                    context: dialogContext,
-                    barrierDismissible: false,
-                    builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.purpleAccent)),
-                  );
+                  // 로딩 표시
+                  showDialog(context: dialogContext, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.purpleAccent)));
 
                   try {
                     Directory tempDir = await getTemporaryDirectory();
                     String outputPath = "${tempDir.path}/timelapse_${DateTime.now().millisecondsSinceEpoch}.mp4";
 
-                    // 4배속 + 소리 제거 마법 주문
-                    String command = "-y -i $_videoPath -filter:v \"setpts=0.25*PTS\" -c:v mpeg4 -an $outputPath";
+                    // 15초 숏폼 마법 공식
+                    double speedFactor = 1.0;
+                    if (_recordedDurationInSeconds > 15) {
+                      speedFactor = 15.0 / _recordedDurationInSeconds;
+                    }
+                    String command = "-y -i $_videoPath -filter:v \"setpts=$speedFactor*PTS\" -c:v mpeg4 -an $outputPath";
 
                     await FFmpegKit.execute(command).then((session) async {
                       final returnCode = await session.getReturnCode();
-                      
-                      Navigator.pop(dialogContext); // 로딩 팝업 닫기
+                      Navigator.pop(dialogContext); // 로딩 창 닫기
 
                       if (ReturnCode.isSuccess(returnCode)) {
-                        bool hasAccess = await Gal.hasAccess();
-                        if (!hasAccess) await Gal.requestAccess();
-                        
-                        await Gal.putVideo(outputPath); // 갤러리에 저장
+                        // 1. 혹시 모르니 갤러리에도 소장용으로 하나 저장해 둡니다.
+                        await Gal.putVideo(outputPath); 
                         
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚡ 타임랩스 영상이 갤러리에 쏙 들어갔어요!')));
+                          // 2. 운동 팝업과 화면을 깔끔하게 닫고 홈으로 돌아갑니다.
                           Navigator.pop(dialogContext); 
-                          Navigator.pop(context, {'reps': _repCounter.reps}); 
+                          Navigator.pop(context, {'reps': _repCounter.reps});
+                          
+                          // 3. 🌟 대망의 공유 기능 실행! 🌟
+                          // 스마트폰의 네이티브 공유 창을 띄워 인스타 스토리, 릴스, 카톡 등으로 쏠 수 있게 해줍니다.
+                          await Share.shareXFiles(
+                            [XFile(outputPath)], 
+                            text: '오늘도 헬마고치와 오운완! 🔥 #오운완 #스쿼트', // 공유할 때 같이 들어갈 기본 문구
+                          );
                         }
                       } else {
-                        print("FFmpeg 변환 실패");
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('영상 변환에 실패했습니다.')));
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('영상 변환에 실패했습니다 😭')));
                       }
                     });
-                  } catch (e) {
-                    Navigator.pop(dialogContext);
-                    print("타임랩스 에러: $e");
+                  } catch (e) { 
+                    Navigator.pop(dialogContext); 
+                    print("에러: $e"); 
                   }
                 },
-                icon: const Icon(Icons.fast_forward),
-                label: const Text('타임랩스(4배속)로 갤러리 저장', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
-              const SizedBox(height: 10),
-
-              // 📸 2. 일반 속도 저장 버튼
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
-                onPressed: () async { 
-                  try {
-                    bool hasAccess = await Gal.hasAccess();
-                    if (!hasAccess) await Gal.requestAccess();
-                    
-                    await Gal.putVideo(_videoPath!); 
-                    
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('📸 갤러리에 일반 영상이 저장되었습니다!')));
-                      Navigator.pop(dialogContext); 
-                      Navigator.pop(context, {'reps': _repCounter.reps}); 
-                    }
-                  } catch (e) {
-                    print("갤러리 저장 실패: $e");
-                  }
-                },
-                icon: const Icon(Icons.save_alt),
-                label: const Text('일반 속도로 갤러리 저장', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                icon: const Icon(Icons.share), // 아이콘도 공유 느낌으로 변경!
+                label: const Text('타임랩스 인스타 공유하기', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               ),
               const SizedBox(height: 5),
 
-              // 🗑️ 3. 저장 안 함 버튼
+              // 🗑️ 안 함 버튼 (문구 살짝 변경)
               TextButton(
                 onPressed: () { 
                   Navigator.pop(dialogContext); 
                   if (mounted) Navigator.pop(context, {'reps': _repCounter.reps}); 
                 },
-                child: const Text('영상 저장 안 함 (기록만 저장)', style: TextStyle(color: Colors.grey)),
+                child: const Text('공유 안 함 (기록만 저장)', style: TextStyle(color: Colors.grey)),
               )
             ]
           ],
         ),
+        // 녹화 안 했을 때만 뜨는 기본 종료 버튼
         actions: _hasRecorded && _videoPath != null ? [] : [
           Center(
             child: ElevatedButton(
@@ -436,19 +424,24 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
                         String path = await FlutterScreenRecording.stopRecordScreen;
                         if (path.isNotEmpty) {
                           _videoPath = path;
+                          // ⏳ 녹화 정지 시 총 시간 계산!
+                          if (_recordingStartTime != null) {
+                            _recordedDurationInSeconds = DateTime.now().difference(_recordingStartTime!).inSeconds;
+                          }
                         }
                         setState(() { _isRecording = false; });
                       } catch (e) {
                         print("수동 화면 녹화 종료 에러: $e");
                       }
                     } else {
-                      // ⏺️ 화면 녹화 즉시 시작! (준비 시간이든 운동 중이든 상관없이 누르면 바로 시작)
+                      // ⏺️ 화면 녹화 시작!
                       try {
                         bool started = await FlutterScreenRecording.startRecordScreen("helmagotchi_${DateTime.now().millisecondsSinceEpoch}");
                         if (started) {
                           setState(() { 
                             _isRecording = true; 
                             _hasRecorded = true; 
+                            _recordingStartTime = DateTime.now(); // ⏳ 지금부터 초시계 시작!
                           });
                         }
                       } catch (e) {

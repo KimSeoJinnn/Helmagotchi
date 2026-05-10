@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async'; 
 import 'dart:convert';
-
+import 'package:flutter/services.dart';
 import '../core/workout_data.dart';
 import '../data/user_model.dart';
 import '../data/exp_service.dart';
@@ -58,8 +58,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     });
   }
 
-  // 👇 기존 _loadSavedData 함수를 지우고 이걸로 덮어써주세요!
   Future<void> _loadSavedData() async {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     final prefs = await SharedPreferences.getInstance();
     final String todayKey = DateTime.now().toString().split(' ')[0]; // "2024-05-10" 형태
 
@@ -68,14 +68,16 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     List<String> unlockedAcc = await LocalStorage.loadUnlockedAccessories();
 
     String? statsJson = prefs.getString('daily_stats');
-  if (statsJson != null) {
-    Map<String, dynamic> statsMap = jsonDecode(statsJson);
-    if (statsMap.containsKey(todayKey)) {
-      todaySquats = statsMap[todayKey]['reps'] ?? 0;
-    } else {
-      todaySquats = 0;
+    if (statsJson != null) {
+      Map<String, dynamic> statsMap = jsonDecode(statsJson);
+      if (statsMap.containsKey(todayKey)) {
+        todaySquats = statsMap[todayKey]['reps'] ?? 0;
+      } else {
+        todaySquats = 0;
+      }
     }
-  }
+
+    if (!mounted) return;
 
     setState(() {
       myTotalSquats = prefs.getInt('total_squats') ?? 0;
@@ -154,6 +156,10 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       )
     );
 
+    Future.delayed(const Duration(milliseconds: 500), () {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    });
+
     if (result == null) return;
     int completedReps = result['reps'] ?? 0;
     if (completedReps == 0) return;
@@ -177,6 +183,10 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     });
 
     await _saveCurrentData();
+    
+    await _loadSavedData();
+    
+    
 
     try {
       final titlesAfterWorkout = _titleService.getUnlockedTitles(myUser);
@@ -314,44 +324,55 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // 🎯 일일 목표 설정 팝업창
+  // 🎯 목표 설정 팝업창 (우주 가출 방지 & 0.3초 시간차 집중모드 복구)
   void _showGoalSettingDialog() {
     TextEditingController goalController = TextEditingController(text: myDailyGoal.toString());
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('🎯 일일 퀘스트 목표 설정', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: goalController,
-          keyboardType: TextInputType.number, // 숫자 키보드만 나오게!
-          decoration: InputDecoration(
-            labelText: '스쿼트 목표 횟수',
-            suffixText: '회',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('🎯 일일 퀘스트 목표 설정', style: TextStyle(fontWeight: FontWeight.bold)),
+          
+          // 💡 핵심: 억지로 밀어올리는 코드를 빼고, 내용물만 부드럽게 스크롤되게 감싸줍니다!
+          content: SingleChildScrollView(
+            child: TextField(
+              controller: goalController,
+              keyboardType: TextInputType.number, 
+              decoration: InputDecoration(
+                labelText: '스쿼트 목표 횟수',
+                suffixText: '회',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
-            onPressed: () {
-              setState(() {
-                // 입력한 숫자를 가져오되, 이상한 문자면 기본값 50으로 설정
-                myDailyGoal = int.tryParse(goalController.text) ?? 50; 
-              });
-              _saveCurrentData(); // 💡 바뀐 목표치 로컬에 저장!
-              Navigator.pop(context);
-            },
-            child: const Text('저장', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('취소', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+              onPressed: () {
+                setState(() {
+                  myDailyGoal = int.tryParse(goalController.text) ?? 50; 
+                });
+                _saveCurrentData(); 
+                Navigator.pop(context);
+              },
+              child: const Text('저장', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      // 🛡️ 🌟 0.3초 시간차 공격! 🌟
+      // 키보드가 완전히 다 내려가고 화면이 진정될 때까지 0.3초(300ms) 기다렸다가 상태창을 숨깁니다!
+      Future.delayed(const Duration(milliseconds: 300), () {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      });
+    });
   }
 
   // 🎒 칭호 아래에 추가할 옷장 바텀시트!
@@ -521,6 +542,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     String displayTitle = _selectedTitle ?? _titleService.getLatestUnlockedTitle(myUser)?.name ?? "헬린이";
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       extendBody: true,
       body: Container(
         decoration: const BoxDecoration(
@@ -792,15 +814,33 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               _buildNavButton(Icons.fitness_center, () => _startWorkout(false), Colors.blueAccent), // 스쿼트
               
               _buildNavButton(Icons.checkroom, _showClosetSheet, Colors.green), // 옷장
+             // 📅 캘린더 버튼
               _buildNavButton(Icons.calendar_month, () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const WorkoutCalendarScreen()));
-              }, Colors.purpleAccent), // 캘린더
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (context) => const WorkoutCalendarScreen())
+                ).then((_) {
+                  _loadSavedData();
+                  // 화면이 돌아온 후 0.3초 뒤에 집중모드 다시 켜기!
+                  Future.delayed(const Duration(milliseconds: 300), () {
+                    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+                  });
+                }); // 👈 .then 괄호 닫기
+              }, Colors.purpleAccent), // 👈 _buildNavButton 괄호 닫기
               
-              // 📸 새롭게 추가된 AR 카메라 버튼!
+              // 📸 AR 카메라 버튼
               _buildNavButton(Icons.camera_alt, () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const ARPhotoScreen()));
-              }, Colors.pinkAccent),
-
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (context) => const ARPhotoScreen())
+                ).then((_) {
+                  _loadSavedData();
+                  // 카메라 끄고 돌아왔을 때도 0.3초 뒤에 집중모드 다시 켜기!
+                  Future.delayed(const Duration(milliseconds: 300), () {
+                    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+                  });
+                }); // 👈 .then 괄호 닫기
+              }, Colors.pinkAccent), // 👈 _buildNavButton 괄호 닫기
               _buildNavButton(Icons.emoji_events, () => _startWorkout(true), Colors.orangeAccent), // 최고 기록
             ],
           ),
