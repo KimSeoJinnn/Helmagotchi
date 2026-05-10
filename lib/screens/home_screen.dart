@@ -42,6 +42,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   bool _isBubbleVisible = false; 
   Timer? _bubbleTimer; 
 
+  int todaySquats = 0;
+
   @override
   void initState() {
     super.initState();
@@ -59,10 +61,21 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   // 👇 기존 _loadSavedData 함수를 지우고 이걸로 덮어써주세요!
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
-    
+    final String todayKey = DateTime.now().toString().split(' ')[0]; // "2024-05-10" 형태
+
     // 💡 악세사리 데이터 불러오기
     String loadedAcc = await LocalStorage.loadEquippedAccessory();
     List<String> unlockedAcc = await LocalStorage.loadUnlockedAccessories();
+
+    String? statsJson = prefs.getString('daily_stats');
+  if (statsJson != null) {
+    Map<String, dynamic> statsMap = jsonDecode(statsJson);
+    if (statsMap.containsKey(todayKey)) {
+      todaySquats = statsMap[todayKey]['reps'] ?? 0;
+    } else {
+      todaySquats = 0;
+    }
+  }
 
     setState(() {
       myTotalSquats = prefs.getInt('total_squats') ?? 0;
@@ -608,7 +621,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
                         child: LinearProgressIndicator(
-                          value: myDailyGoal > 0 ? (myTotalSquats / myDailyGoal).clamp(0.0, 1.0) : 0, // 에러 방지 계산식
+                          value: myDailyGoal > 0 ? (todaySquats / myDailyGoal).clamp(0.0, 1.0) : 0, // 에러 방지 계산식
                           minHeight: 12,
                           backgroundColor: Colors.grey[200],
                           color: Colors.amber,
@@ -617,7 +630,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                       const SizedBox(height: 8),
                       // 🔢 숫자 텍스트
                       Text(
-                        '$myTotalSquats / $myDailyGoal 회', 
+                        '$todaySquats / $myDailyGoal 회', 
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87)
                       ),
                     ],

@@ -3,7 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:gal/gal.dart';
 import 'dart:typed_data';
-
+import 'package:share_plus/share_plus.dart';
 import '../data/local_storage.dart';
 
 class ARPhotoScreen extends StatefulWidget {
@@ -26,6 +26,13 @@ class _ARPhotoScreenState extends State<ARPhotoScreen> {
 
   double _petScale = 1.0;  // 현재 펫의 크기 비율 (기본 1배)
   double _baseScale = 1.0; // 확대/축소할 때 기준이 되는 값
+
+  // 👇 👇 새롭게 추가된 해시태그 변수들 👇 👇
+  double _textX = 50;         // 텍스트 초기 가로 위치
+  double _textY = 150;        // 텍스트 초기 세로 위치
+  double _textScale = 1.0;     // 현재 텍스트 크기 비율
+  double _baseTextScale = 1.0; // 확대/축소 기준값
+  bool _showTextOverlay = true; // 텍스트 보이기/숨기기 상태 (기본값: 보임)
 
   @override
   void initState() {
@@ -82,20 +89,88 @@ class _ARPhotoScreenState extends State<ARPhotoScreen> {
     if (mounted) setState(() {});
   }
 
+  // 📸 촬영 & 자동 저장 기능
   Future<void> _takePicture() async {
     try {
-      final Uint8List? image = await _screenshotController.capture();
-      if (image != null) {
-        await Gal.putImageBytes(image, name: "helmagotchi_${DateTime.now().millisecondsSinceEpoch}");
+      final Uint8List? imageBytes = await _screenshotController.capture();
+      
+      if (imageBytes != null) {
+        // 1. 찰칵! 하자마자 바로 갤러리에 자동 저장합니다.
+        await Gal.putImageBytes(imageBytes, name: "helmagotchi_${DateTime.now().millisecondsSinceEpoch}");
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('📸 찰칵! 갤러리에 사진이 저장되었습니다!'), backgroundColor: Colors.green),
+            const SnackBar(content: Text('📸 갤러리에 사진이 저장되었습니다!'), backgroundColor: Colors.green),
           );
+        }
+
+        // 2. 저장 후 예쁜 공유용 미리보기 창을 띄웁니다.
+        if (mounted) {
+          _showPreviewDialog(imageBytes);
         }
       }
     } catch (e) {
-      debugPrint("Screenshot error: $e");
+      debugPrint("Capture error: $e");
     }
+  }
+
+  // 📱 미리보기 & 공유 전용 팝업 창 (오버플로우 해결 버전)
+  void _showPreviewDialog(Uint8List imageBytes) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, 
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: const EdgeInsets.all(16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("📸 인생샷 완성!", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 12),
+            
+            // 💡 Flexible을 사용하여 화면이 작아도 노란 바리케이드(오버플로우)가 뜨지 않고 알아서 줄어듭니다!
+            Flexible(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(15),
+                child: Image.memory(imageBytes, fit: BoxFit.contain), 
+              ),
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // 🚀 길쭉하고 누르기 편한 단일 공유 버튼!
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.pinkAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.share, size: 20),
+                label: const Text("인스타 스토리 / 공유하기", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                onPressed: () async {
+                  final xFile = XFile.fromData(imageBytes, mimeType: 'image/png', name: 'workout.png');
+                  await Share.shareXFiles([xFile], text: '#헬마고치 #오운완 득근득근! 💪');
+                  if (mounted) Navigator.pop(context); // 공유 창 띄운 후 팝업 닫기
+                },
+              ),
+            ),
+            
+            const SizedBox(height: 8),
+            
+            // 닫기 버튼
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("닫기", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            )
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -126,59 +201,120 @@ class _ARPhotoScreenState extends State<ARPhotoScreen> {
                     child: SizedBox(
                       width: 100,
                       // 카메라 렌즈가 가진 고유의 원본 비율을 계산해서 그대로 적용합니다.
-                      height: 100 / _cameraController!.value.aspectRatio,
+                      height: 100 * _cameraController!.value.aspectRatio,
                       child: CameraPreview(_cameraController!),
                     ),
                   ),
                 ),
                 
-                // 💡 2. 손가락으로 드래그만 가능한 헬마고치! (확대/축소 제거)
+                // 💡 2. 크기를 키워도 터치가 완벽하게 먹히는 헬마고치!
                 Positioned(
                   left: _petX,
                   top: _petY,
-                  child: GestureDetector(
-                    // 👆 오직 이동(드래그)만 담당합니다!
-                    onPanUpdate: (details) {
-                      setState(() {
-                        _petX += details.delta.dx;
-                        _petY += details.delta.dy;
-                      });
-                    },
-                    child: SizedBox( // 👈 복잡했던 Transform.scale을 완전히 빼버렸습니다.
-                      width: 140, 
-                      height: 140,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        clipBehavior: Clip.none,
-                        children: [
-                          Image.asset('assets/images/photo.png', width: 100, filterQuality: FilterQuality.none),
-                          
-                          // 악세사리 (사진 화면 전용 핏 & 이미지 바꿔치기!)
-                          if (_equippedAccessory != 'none')
-                            Builder(
-                              builder: (context) {
-                                double tPos = 0; double rPos = 0; double w = 30;
-                                String imageFileName = _equippedAccessory;
+                  // 🌟 핵심: Transform을 바깥으로 빼서 '터치 센서'도 같이 커지게 만듭니다!
+                  child: Transform.scale(
+                    scale: _petScale,
+                    child: GestureDetector(
+                      // 터치 시작 시 기준 크기 저장
+                      onScaleStart: (details) {
+                        _baseScale = _petScale;
+                      },
+                      // 이동 및 확대/축소
+                      onScaleUpdate: (details) {
+                        setState(() {
+                          _petX += details.focalPointDelta.dx;
+                          _petY += details.focalPointDelta.dy;
+                          _petScale = (_baseScale * details.scale).clamp(0.5, 3.0);
+                        });
+                      },
+                      child: SizedBox(
+                        width: 140, 
+                        height: 140,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          clipBehavior: Clip.none,
+                          children: [
+                            Image.asset('assets/images/photo.png', width: 100, filterQuality: FilterQuality.none),
+                            
+                            // 악세사리 유지
+                            if (_equippedAccessory != 'none')
+                              Builder(
+                                builder: (context) {
+                                  double tPos = 0; double rPos = 0; double w = 30;
+                                  String imageFileName = _equippedAccessory;
 
-                                if (_equippedAccessory == 'crown') { tPos = 10; rPos = 50; w = 30; }
-                                else if (_equippedAccessory == 'wing') { tPos = 35; rPos = 85; w = 50; imageFileName = 'wing_color'; }
-                                else if (_equippedAccessory == 'ribbon') { tPos = 15; rPos = 50; w = 35; }
-                                else if (_equippedAccessory == 'sunglasses') { tPos = 25; rPos = 42; w = 50; }
-                                
-                                return Positioned(
-                                  top: tPos, right: rPos, 
-                                  child: Image.asset('assets/images/$imageFileName.png', width: w, filterQuality: FilterQuality.none)
-                                );
-                              },
-                            ),
-                        ],
+                                  if (_equippedAccessory == 'crown') { tPos = 10; rPos = 50; w = 30; }
+                                  else if (_equippedAccessory == 'wing') { tPos = 35; rPos = 85; w = 50; imageFileName = 'wing_color'; }
+                                  else if (_equippedAccessory == 'ribbon') { tPos = 15; rPos = 50; w = 35; }
+                                  else if (_equippedAccessory == 'sunglasses') { tPos = 25; rPos = 42; w = 50; }
+                                  
+                                  return Positioned(
+                                    top: tPos, right: rPos, 
+                                    child: Image.asset('assets/images/$imageFileName.png', width: w, filterQuality: FilterQuality.none)
+                                  );
+                                },
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ],
+
+          // 👇 해시태그 오버레이
+          if (_showTextOverlay)
+            Positioned(
+              left: _textX,
+              top: _textY,
+              // 🌟 핵심: 텍스트 터치 센서도 글씨와 함께 커지도록 밖으로 뺐습니다!
+              child: Transform.scale(
+                scale: _textScale,
+                child: GestureDetector(
+                  onScaleStart: (details) {
+                    _baseTextScale = _textScale;
+                  },
+                  onScaleUpdate: (details) {
+                    setState(() {
+                      _textX += details.focalPointDelta.dx;
+                      _textY += details.focalPointDelta.dy;
+                      _textScale = (_baseTextScale * details.scale).clamp(0.5, 4.0);
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    color: Colors.transparent, // 투명한 배경을 깔아서 여유로운 터치 공간 확보
+                    child: Stack( 
+                      children: [
+                        // 1. 흰색 테두리
+                        Text(
+                          '#오운완 #헬마고치',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            foreground: Paint()
+                              ..style = PaintingStyle.stroke
+                              ..strokeWidth = 4
+                              ..color = Colors.white,
+                          ),
+                        ),
+                        // 2. 실제 검은 글씨
+                        const Text(
+                          '#오운완 #헬마고치',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
+          ],
+        ),
+      ),
 
           // ❌ 뒤로 가기 버튼
           Positioned(
@@ -186,6 +322,31 @@ class _ARPhotoScreenState extends State<ARPhotoScreen> {
             child: IconButton(
               icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 30),
               onPressed: () => Navigator.pop(context),
+            ),
+          ),
+
+          // 👇 👇 새롭게 추가된 해시태그 토글 버튼 👇 👇
+          Positioned(
+            top: 50, right: 20, // 우측 상단 배치
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _showTextOverlay = !_showTextOverlay; // true <-> false 뒤집기
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.4), // 반투명 배경으로 시인성 확보
+                  shape: BoxShape.circle,
+                ),
+                // 현재 상태에 따라 아이콘을 바꿔서 친절하게 알려줍니다.
+                child: Icon(
+                  _showTextOverlay ? Icons.label : Icons.label_off_outlined,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
             ),
           ),
 
