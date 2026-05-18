@@ -40,7 +40,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
   bool _isProcessing = false;
 
   bool isPreparing = true;
-  int prepTimeLeft = 5; 
+  int prepTimeLeft = 10; 
 
   Pose? _currentPose;
   Size? _imageSize;
@@ -401,7 +401,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> with SingleTi
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(widget.isRecordMode ? '최고 기록 측정 준비!' : '여기에 서세요!', style: const TextStyle(fontSize: 30, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                        Text(widget.isRecordMode ? '최고 기록 측정 준비!' : '준비하세요!', style: const TextStyle(fontSize: 30, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 20),
                         Text('$prepTimeLeft', style: const TextStyle(fontSize: 150, fontWeight: FontWeight.bold, color: Colors.white)),
                       ],
